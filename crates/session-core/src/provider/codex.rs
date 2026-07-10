@@ -15,8 +15,9 @@ use crate::models::project::ProjectEntry;
 use crate::models::session::{SessionIndexEntry, SessionStatus};
 use crate::models::stats::{DailyTokenEntry, TokenUsageSummary};
 use crate::state::{
-    clear_message_cache, clear_message_cache_for_path, get_cached_full_messages, get_cached_page,
-    paginate_from_range, store_full_messages, store_partial_messages, tail_window_len,
+    clear_message_cache, clear_message_cache_for_path, file_modified_key, get_cached_full_messages,
+    get_cached_page, paginate_from_range, store_full_messages, store_partial_messages,
+    tail_window_len,
 };
 
 // Bumped to 3 in v2.12.1 to invalidate stale caches built by v2.12.0 and
@@ -39,7 +40,10 @@ use crate::state::{
 // Desktop's synthetic per-chat scratch workspaces (`…/Codex/<date>/<slug>`)
 // into a `<codex-direct>/DATE` "直连对话" virtual project. Old indexes lack the
 // field, so force a rebuild.
-const DISK_CACHE_VERSION: u32 = 7;
+// Bumped to 8: `file_index` now stores a nanosecond mtime key and is reconciled
+// against the sessions directory once per process. This picks up rollout files
+// created, changed or deleted while AI Session Viewer was not running.
+const DISK_CACHE_VERSION: u32 = 8;
 
 /// Sentinel prefix for project IDs synthesized from sessions with no cwd.
 /// Format: `<codex-unrooted>/YYYY-MM-DD`. The angle brackets are invalid in
@@ -129,6 +133,8 @@ struct CodexDiskCache {
 #[serde(rename_all = "camelCase")]
 struct CodexFileMeta {
     path: String,
+    #[serde(default)]
+    modified_key: u64,
     id: String,
     cwd: String,
     cli_version: Option<String>,
@@ -171,13 +177,22 @@ fn read_disk_cache() -> CodexDiskCache {
         Err(_) => return CodexDiskCache::default(),
     };
 
-    let cache: CodexDiskCache = match serde_json::from_str(&content) {
+    let mut cache: CodexDiskCache = match serde_json::from_str(&content) {
         Ok(cache) => cache,
         Err(_) => return CodexDiskCache::default(),
     };
 
     if cache.version != DISK_CACHE_VERSION {
         return CodexDiskCache::default();
+    }
+
+    if let Some(index) = cache.file_index.take() {
+        let (index, changed) = reconcile_file_index(index, scan_all_session_files());
+        cache.file_index = Some(index);
+        if changed {
+            cache.projects = None;
+            cache.sessions_by_project.clear();
+        }
     }
 
     cache
@@ -777,6 +792,7 @@ fn file_meta_for(path: &Path) -> Option<CodexFileMeta> {
         .map(systemtime_to_rfc3339);
     Some(CodexFileMeta {
         path: path.to_string_lossy().to_string(),
+        modified_key: file_modified_key(path).unwrap_or_default(),
         id: meta.id,
         cwd: meta.cwd,
         cli_version: meta.cli_version,
@@ -821,6 +837,48 @@ fn build_file_index() -> Vec<CodexFileMeta> {
         .collect();
     crate::scan_progress::finish();
     index
+}
+
+/// Reconcile a persisted index with the current rollout files. Unchanged files
+/// keep their cached metadata; only new or modified files are opened again.
+fn reconcile_file_index(
+    cached: Vec<CodexFileMeta>,
+    files: Vec<PathBuf>,
+) -> (Vec<CodexFileMeta>, bool) {
+    let cached_len = cached.len();
+    let mut cached_by_path: HashMap<String, CodexFileMeta> = cached
+        .into_iter()
+        .map(|entry| (entry.path.clone(), entry))
+        .collect();
+    let mut changed = cached_by_path.len() != cached_len;
+    let mut index = Vec::with_capacity(files.len());
+
+    for path in files {
+        let path_string = path.to_string_lossy().to_string();
+        match cached_by_path.remove(&path_string) {
+            Some(entry) if entry.modified_key == file_modified_key(&path).unwrap_or_default() => {
+                index.push(entry);
+            }
+            Some(_) => {
+                changed = true;
+                if let Some(entry) = file_meta_for(&path) {
+                    index.push(entry);
+                }
+            }
+            None => {
+                if let Some(entry) = file_meta_for(&path) {
+                    changed = true;
+                    index.push(entry);
+                }
+            }
+        }
+    }
+
+    if !cached_by_path.is_empty() {
+        changed = true;
+    }
+
+    (index, changed)
 }
 
 /// Incrementally update the index for changed rollout files (called by the fs
@@ -992,10 +1050,17 @@ fn scan_projects_from_meta() -> Result<Vec<ProjectEntry>, String> {
     Ok(projects)
 }
 
-fn refresh_projects_cache() -> Result<Vec<ProjectEntry>, String> {
+fn build_projects_cache() -> Result<Vec<ProjectEntry>, String> {
     let projects = scan_projects_from_meta()?;
     store_projects(&projects);
     Ok(projects)
+}
+
+/// Explicit deep refresh for the manual UI action. Background/watcher refreshes
+/// must keep using `get_projects` after their incremental invalidation.
+pub fn rebuild_projects_cache() -> Result<Vec<ProjectEntry>, String> {
+    invalidate_sessions_cache();
+    build_projects_cache()
 }
 
 pub fn get_projects() -> Result<Vec<ProjectEntry>, String> {
@@ -1003,7 +1068,7 @@ pub fn get_projects() -> Result<Vec<ProjectEntry>, String> {
         return Ok(projects);
     }
 
-    refresh_projects_cache()
+    build_projects_cache()
 }
 
 /// 删除一个 Codex「项目」。Codex 的会话是散落在 `<year>/<month>/<day>/` 下的
@@ -1868,5 +1933,54 @@ fn truncate_string(s: &str, max_len: usize) -> String {
     } else {
         let truncated: String = s.chars().take(max_len).collect();
         format!("{}...", truncated)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn write_rollout(path: &Path, id: &str, cwd: &str) {
+        let row = serde_json::json!({
+            "type": "session_meta",
+            "payload": {
+                "id": id,
+                "cwd": cwd,
+                "source": "cli"
+            }
+        });
+        fs::write(path, format!("{row}\n")).unwrap();
+    }
+
+    #[test]
+    fn reconcile_adds_rollout_created_while_viewer_was_closed() {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!(
+            "ai-session-viewer-codex-reconcile-{}-{unique}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&dir).unwrap();
+
+        let existing = dir.join("rollout-existing.jsonl");
+        write_rollout(&existing, "existing", r"C:\projects\existing");
+        let cached = vec![file_meta_for(&existing).unwrap()];
+
+        let added = dir.join("rollout-added.jsonl");
+        write_rollout(&added, "added", r"C:\Users\zuolan\Desktop\CCS2KEIL");
+        let added_path = added.to_string_lossy().into_owned();
+
+        let (index, changed) = reconcile_file_index(cached, vec![existing, added]);
+
+        assert!(changed);
+        assert_eq!(index.len(), 2);
+        assert!(index.iter().any(|entry| {
+            entry.path == added_path && entry.cwd == r"C:\Users\zuolan\Desktop\CCS2KEIL"
+        }));
+
+        fs::remove_dir_all(dir).unwrap();
     }
 }

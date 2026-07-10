@@ -21,6 +21,15 @@ pub fn refresh_projects_cache(source: String) -> Result<Vec<ProjectEntry>, Strin
 }
 
 #[tauri::command]
+pub fn rebuild_projects_cache(source: String) -> Result<Vec<ProjectEntry>, String> {
+    match source.as_str() {
+        "claude" => claude::refresh_projects_cache(),
+        "codex" => codex::rebuild_projects_cache(),
+        _ => Err(format!("Unknown source: {}", source)),
+    }
+}
+
+#[tauri::command]
 pub fn delete_project(
     source: String,
     project_id: String,

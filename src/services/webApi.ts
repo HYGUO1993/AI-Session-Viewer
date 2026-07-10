@@ -212,6 +212,10 @@ export async function refreshProjectsCache(source: string): Promise<ProjectEntry
   return getProjects(source);
 }
 
+export async function rebuildProjectsCache(source: string): Promise<ProjectEntry[]> {
+  return apiFetch("/api/projects", { source, rebuild: "true" });
+}
+
 export async function getSessions(
   source: string,
   projectId: string

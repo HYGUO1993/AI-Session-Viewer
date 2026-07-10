@@ -4,6 +4,22 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.16.3] - 2026-07-11
+
+### Added
+
+- 「所有项目」页新增“刷新缓存”按钮，桌面端与 Web 端均可手动强制重建项目缓存；Codex 刷新会重新扫描完整 rollout 文件索引，修复原刷新链路仅返回旧缓存的问题。
+
+### Fixed
+
+- 修复 AI Session Viewer 关闭期间新增、修改或删除的 Codex rollout 未同步到项目列表的问题。Codex 磁盘索引现在会在每个进程首次载入时与 `~/.codex/sessions/` 做一次轻量对账，仅重读新增或变更文件；缓存版本升级到 8，首次启动会自动重建旧缓存，无需手动删除 `codex-list-cache.json`。
+
+### Version
+
+- 将工作区版本统一提升到 `2.16.3`，同步 `package.json`、`package-lock.json`、`Cargo.lock`、`src-tauri/tauri.conf.json` 与 3 个 Cargo manifest。
+
+---
+
 ## [2.16.2] - 2026-06-27
 
 ### Added

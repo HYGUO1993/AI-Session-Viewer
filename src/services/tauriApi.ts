@@ -37,6 +37,10 @@ export async function refreshProjectsCache(source: string): Promise<ProjectEntry
   return invoke<ProjectEntry[]>("refresh_projects_cache", { source });
 }
 
+export async function rebuildProjectsCache(source: string): Promise<ProjectEntry[]> {
+  return invoke<ProjectEntry[]>("rebuild_projects_cache", { source });
+}
+
 export async function getSessions(
   source: string,
   projectId: string

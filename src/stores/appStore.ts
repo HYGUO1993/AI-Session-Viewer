@@ -145,8 +145,9 @@ interface AppState {
   /** Fetch the cost summary for a session, cached per file path. */
   loadSessionCost: (filePath: string, force?: boolean) => Promise<SessionCostSummary | null>;
   clearSelection: () => void;
-  /** Silently refresh projects and current session list without loading states */
-  refreshInBackground: (forceReload?: boolean) => Promise<void>;
+  /** Silently refresh projects and the current session list. `rebuildProjects`
+   * is reserved for the explicit manual cache refresh. */
+  refreshInBackground: (forceReload?: boolean, rebuildProjects?: boolean) => Promise<void>;
   /** Force-reload page 0 of the currently selected session's messages. Preserves user's scroll position in the viewport but rewinds state to the latest page. */
   reloadLatestMessages: () => Promise<void>;
   updateSessionMeta: (
@@ -770,12 +771,14 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
-  refreshInBackground: async (forceReload = false) => {
+  refreshInBackground: async (forceReload = false, rebuildProjects = false) => {
     const { source, selectedProject } = get();
     try {
-      const loadProjects = forceReload
-        ? api.refreshProjectsCache
-        : api.getProjects;
+      const loadProjects = rebuildProjects
+        ? api.rebuildProjectsCache
+        : forceReload
+          ? api.refreshProjectsCache
+          : api.getProjects;
       const loadSessions = forceReload
         ? api.refreshSessionsCache
         : api.getSessions;

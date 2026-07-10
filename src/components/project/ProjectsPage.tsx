@@ -3,7 +3,20 @@ import { useNavigate } from "react-router-dom";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useAppStore } from "../../stores/appStore";
 import type { ProjectEntry } from "../../types";
-import { FolderOpen, FolderClock, Clock, Hash, Tag, MoreHorizontal, AlertCircle, CheckSquare, X, Trash2, Loader2 } from "lucide-react";
+import {
+  FolderOpen,
+  FolderClock,
+  Clock,
+  Hash,
+  Tag,
+  MoreHorizontal,
+  AlertCircle,
+  CheckSquare,
+  X,
+  Trash2,
+  Loader2,
+  RefreshCw,
+} from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { ProjectActionsMenu } from "./ProjectActionsMenu";
@@ -18,6 +31,7 @@ export function ProjectsPage() {
     projects,
     loadProjects,
     projectsLoading,
+    refreshInBackground,
     crossProjectTags,
     globalTagFilter,
     loadCrossProjectTags,
@@ -47,6 +61,16 @@ export function ProjectsPage() {
   const [batchBusy, setBatchBusy] = useState(false);
   const [batchDeleteOpen, setBatchDeleteOpen] = useState(false);
   const [batchWithCcConfig, setBatchWithCcConfig] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await refreshInBackground(true, true);
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   const toggleSelected = (id: string) => {
     setSelected((prev) => {
@@ -180,9 +204,17 @@ export function ProjectsPage() {
       <div className="px-6 pt-6 shrink-0">
       <div className="flex items-center mb-6">
         <h1 className="text-2xl font-bold">所有项目</h1>
-        {projects.length > 0 && (
-          <div className="ml-auto">
-            {selectMode ? (
+        <div className="ml-auto flex items-center gap-2">
+          <button
+            onClick={handleRefresh}
+            disabled={refreshing || projectsLoading || selectMode}
+            className="text-xs px-3 py-1.5 rounded-md border border-border text-muted-foreground hover:text-foreground hover:border-primary/50 transition-colors flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? "animate-spin" : ""}`} />
+            刷新缓存
+          </button>
+          {projects.length > 0 &&
+            (selectMode ? (
               <button
                 onClick={exitSelectMode}
                 className="text-xs px-3 py-1.5 rounded-md border border-border text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1.5"
@@ -198,9 +230,8 @@ export function ProjectsPage() {
                 <CheckSquare className="w-3.5 h-3.5" />
                 选择
               </button>
-            )}
-          </div>
-        )}
+            ))}
+        </div>
       </div>
 
       {/* Global tag filter bar */}

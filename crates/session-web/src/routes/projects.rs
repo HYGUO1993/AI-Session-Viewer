@@ -9,15 +9,20 @@ use session_core::provider::claude::{DeleteLevel, DeleteResult};
 #[derive(Deserialize)]
 pub struct ProjectsQuery {
     pub source: String,
+    #[serde(default)]
+    pub rebuild: bool,
 }
 
 pub async fn get_projects(
     Query(params): Query<ProjectsQuery>,
 ) -> Result<Json<Vec<ProjectEntry>>, (StatusCode, String)> {
     let source = params.source;
-    let result = tokio::task::spawn_blocking(move || match source.as_str() {
-        "claude" => claude::get_projects(),
-        "codex" => codex::get_projects(),
+    let rebuild = params.rebuild;
+    let result = tokio::task::spawn_blocking(move || match (source.as_str(), rebuild) {
+        ("claude", true) => claude::refresh_projects_cache(),
+        ("codex", true) => codex::rebuild_projects_cache(),
+        ("claude", false) => claude::get_projects(),
+        ("codex", false) => codex::get_projects(),
         _ => Err(format!("Unknown source: {}", source)),
     })
     .await
