@@ -5,7 +5,7 @@
 //! The validation rejects:
 //!   - non-existent or non-`.jsonl` paths
 //!   - paths outside the source's allowed root
-//!     (`~/.claude/projects/` or `~/.codex/sessions/`)
+//!     (`~/.claude/projects/`, `~/.codex/sessions/`, or `~/.grok/sessions/`)
 //!   - paths with the wrong layout (e.g. a Codex rollout file not under
 //!     `<year>/<month>/<day>/`)
 //!
@@ -16,13 +16,14 @@ use std::path::{Component, Path, PathBuf};
 
 use crate::parser::path_encoder::get_projects_dir;
 use crate::provider::codex;
+use crate::provider::grok;
 
-/// One of the two supported session sources. Mirrors the string `"claude"` /
-/// `"codex"` carried over the wire.
+/// A supported session source carried over the wire.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SessionSourceKind {
     Claude,
     Codex,
+    Grok,
 }
 
 impl SessionSourceKind {
@@ -30,6 +31,7 @@ impl SessionSourceKind {
         match source {
             "claude" => Ok(Self::Claude),
             "codex" => Ok(Self::Codex),
+            "grok" => Ok(Self::Grok),
             _ => Err(format!("Unknown source: {}", source)),
         }
     }
@@ -55,6 +57,12 @@ fn canonical_codex_root() -> Result<PathBuf, String> {
     let path = codex::get_sessions_dir()
         .ok_or_else(|| "Could not find Codex sessions directory".to_string())?;
     canonicalize_dir(path, "Codex sessions directory")
+}
+
+fn canonical_grok_root() -> Result<PathBuf, String> {
+    let path = grok::get_sessions_dir()
+        .ok_or_else(|| "Could not find Grok sessions directory".to_string())?;
+    canonicalize_dir(path, "Grok sessions directory")
 }
 
 fn validate_claude_layout(path: &Path, base: &Path) -> Result<(), String> {
@@ -91,6 +99,25 @@ fn validate_codex_layout(path: &Path, base: &Path) -> Result<(), String> {
     Ok(())
 }
 
+fn validate_grok_layout(path: &Path, base: &Path) -> Result<(), String> {
+    let relative = path
+        .strip_prefix(base)
+        .map_err(|_| "Session file is outside the Grok sessions directory".to_string())?;
+    let components: Vec<_> = relative.components().collect();
+    if components.len() != 3
+        || components
+            .iter()
+            .any(|component| !matches!(component, Component::Normal(_)))
+        || path.file_name().and_then(|name| name.to_str()) != Some("chat_history.jsonl")
+    {
+        return Err(
+            "Grok session file must be sessions/<encoded-cwd>/<session-id>/chat_history.jsonl"
+                .to_string(),
+        );
+    }
+    Ok(())
+}
+
 /// Canonicalize and validate a user-supplied session file path. Returns the
 /// canonical path on success; returns an error if anything looks suspicious.
 pub fn validate_session_file(source: &str, file_path: &str) -> Result<PathBuf, String> {
@@ -118,6 +145,10 @@ pub fn validate_session_file(source: &str, file_path: &str) -> Result<PathBuf, S
         SessionSourceKind::Codex => {
             let base = canonical_codex_root()?;
             validate_codex_layout(&canonical, &base)?;
+        }
+        SessionSourceKind::Grok => {
+            let base = canonical_grok_root()?;
+            validate_grok_layout(&canonical, &base)?;
         }
     }
 
