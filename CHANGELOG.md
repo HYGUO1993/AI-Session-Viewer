@@ -4,15 +4,32 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [2.17.0] - 2026-07-30
 
 ### Added
 
-- 新增 Grok CLI 本地会话支持：读取 `$GROK_HOME/sessions/` 或 `~/.grok/sessions/` 下的 `summary.json` 与 `chat_history.jsonl`，支持项目/会话浏览、分页消息、全文搜索、导出、标签与别名、恢复、文件监听、单会话及项目删除和桌面端回收站恢复。
+- **新增 Grok CLI 本地会话数据源**：读取 `$GROK_HOME/sessions/`（默认 `~/.grok/sessions/`）下每个会话的 `summary.json` 与 `chat_history.jsonl`，按 `cwd` 聚合项目，无工作目录的会话归入虚拟项目；从摘要和历史中提取会话标题、首条 Prompt、当前模型、创建/更新时间、消息数及有效状态。
+- **完整接入会话浏览链路**：桌面端与 Web 端均支持 Grok 项目/会话发现、手动刷新、从末尾分页、按消息区间跳转，以及文本消息和 Reasoning 内容块渲染；兼容字符串与内容块数组两种消息格式，并忽略系统消息及带 `synthetic_reason` 的合成提醒。
+- **接入现有会话能力**：Grok 会话支持全局搜索（标题、别名、标签和消息正文）、JSON / Markdown / HTML 导出、会话别名与标签、`grok -r {sessionId}` 恢复，以及桌面/Web 文件监听后的自动刷新。
+- **接入删除生命周期**：支持单会话、批量会话和项目删除；桌面端将完整 Grok 会话目录移入应用回收站并支持恢复，同时清理元数据和刷新列表；Web 端删除前校验会话归属，再删除完整会话目录。
+- **新增三数据源界面**：侧边栏加入紫色 Grok Tab，数据源切换时沿用 Claude/Codex 的状态清理与重新加载行为；消息页、分屏会话和恢复命令显示同步识别 Grok。
 
-### Fixed
+### Changed
 
-- Grok 与 Claude/Codex 统一走既有会话生命周期；排除系统提示和合成提醒，并隔离尚未支持 Grok 的 CLI 对话、Token 统计及 Provider 同步入口。
+- Grok 本地历史暂不提供统一的实时对话、Token/花费统计及 Provider 同步能力；切换到 Grok 时隐藏 CLI 对话和使用统计入口，不加载聊天模型、不显示会话成本，并避免将 Grok 写入仅支持 Claude/Codex 的聊天状态。
+- README 与开发文档更新为 Claude、Codex、Grok 三数据源架构，补充 Grok 数据目录、内容块、恢复命令、删除行为、Web 部署安全提示及当前能力边界。
+
+### Security
+
+- Grok 会话文件严格限制为数据根目录内的 `sessions/<encoded-cwd>/<session-id>/chat_history.jsonl`；Web 删除额外核对 `summary.json` 中的项目路径与会话 ID，防止路径越界或跨会话误删。
+
+### 致谢
+
+- 感谢 [@zwisgod](https://github.com/zwisgod) 通过 [PR #9](https://github.com/zuoliangyu/AI-Session-Viewer/pull/9) 贡献 Grok CLI 本地会话支持。
+
+### Version
+
+- 将工作区版本统一提升到 `2.17.0`，同步 `package.json`、`package-lock.json`、`Cargo.lock`、`src-tauri/tauri.conf.json` 与 3 个 Cargo manifest。
 
 ---
 
