@@ -335,7 +335,7 @@ fn resolve_segments_recursive(current: &Path, parts: &[&str], start: usize) -> O
         // try matching with a `.` prefix (hidden directories like .claude, .config)
         if !cfg!(windows) && count >= 2 && parts[start].is_empty() {
             // The `--` split as ["", "rest"] → try ".rest"
-            let dot_candidate = format!(".{}", &parts[start + 1..start + count].join("-"));
+            let dot_candidate = format!(".{}", parts[start + 1..start + count].join("-"));
             let dot_encoded = encode_path_segment(&dot_candidate);
             for (real_name, entry_encoded) in &dir_entries {
                 if *entry_encoded == dot_encoded {
