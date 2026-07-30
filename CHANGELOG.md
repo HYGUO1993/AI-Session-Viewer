@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.17.2] - 2026-07-30
+
+### Fixed
+
+- 移除 `path_encoder` 中 `format!` 参数的多余借用，兼容 Rust 1.97 新增的 `clippy::useless-borrows-in-formatting` 检查，恢复 tag CI。
+
+### Version
+
+- 将工作区版本统一提升到 `2.17.2`，同步 `package.json`、`package-lock.json`、`Cargo.lock`、`src-tauri/tauri.conf.json` 与 3 个 Cargo manifest。
+
+---
+
 ## [2.17.1] - 2026-07-30
 
 ### Added
