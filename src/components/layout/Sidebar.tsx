@@ -13,6 +13,11 @@ import { ProjectActionsMenu } from "../project/ProjectActionsMenu";
 import { DeleteProjectDialog } from "../project/DeleteProjectDialog";
 import type { ProjectEntry } from "../../types";
 import { collapseDirectBuckets, DIRECT_GROUP_ID } from "../../utils/directChat";
+import {
+  formatDateTime,
+  getSupportedTimeZones,
+  getSystemTimeZone,
+} from "../../utils/dateTime";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import {
   FolderOpen,
@@ -56,7 +61,7 @@ export function Sidebar() {
   const { theme, setTheme } = useTheme();
   const { detectCli, availableClis, clearChat } = useChatStore();
   const [showSettings, setShowSettings] = useState(false);
-  const [settingsTab, setSettingsTab] = useState<"guide" | "chat" | "update" | "about">("guide");
+  const [settingsTab, setSettingsTab] = useState<"guide" | "display" | "chat" | "update" | "about">("guide");
   const [projectActionsMenu, setProjectActionsMenu] = useState<{
     project: ProjectEntry;
     anchorRect: DOMRect;
@@ -429,6 +434,16 @@ export function Sidebar() {
                 使用说明
               </button>
               <button
+                onClick={() => setSettingsTab("display")}
+                className={`flex-1 px-4 py-2 text-sm font-medium transition-colors ${
+                  settingsTab === "display"
+                    ? "text-foreground border-b-2 border-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                显示设置
+              </button>
+              <button
                 onClick={() => setSettingsTab("chat")}
                 className={`flex-1 px-4 py-2 text-sm font-medium transition-colors ${
                   settingsTab === "chat"
@@ -465,6 +480,8 @@ export function Sidebar() {
             <div className="max-h-[70vh] overflow-y-auto">
               {settingsTab === "chat" ? (
                 <ChatSettingsTab />
+              ) : settingsTab === "display" ? (
+                <DisplaySettingsTab />
               ) : settingsTab === "update" && __IS_TAURI__ ? (
                 <div className="p-4">
                   <UpdateIndicator />
@@ -668,6 +685,36 @@ export function Sidebar() {
         />
       )}
     </aside>
+  );
+}
+
+function DisplaySettingsTab() {
+  const timeZone = useAppStore((state) => state.timeZone);
+  const setTimeZone = useAppStore((state) => state.setTimeZone);
+  const systemTimeZone = useMemo(getSystemTimeZone, []);
+  const timeZones = useMemo(getSupportedTimeZones, []);
+
+  return (
+    <div className="p-4 space-y-3 text-sm">
+      <label className="block space-y-1.5">
+        <span className="font-medium text-foreground">时区</span>
+        <select
+          value={timeZone}
+          onChange={(event) => setTimeZone(event.target.value)}
+          className="w-full rounded-md border border-border bg-background px-3 py-2 text-foreground"
+        >
+          <option value="">跟随系统（{systemTimeZone}）</option>
+          {timeZones.map((zone) => (
+            <option key={zone} value={zone}>
+              {zone}
+            </option>
+          ))}
+        </select>
+      </label>
+      <div className="text-xs text-muted-foreground">
+        当前时间：{formatDateTime(new Date(), timeZone)}
+      </div>
+    </div>
   );
 }
 

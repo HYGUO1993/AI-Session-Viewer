@@ -11,6 +11,7 @@ import {
   Check,
   Filter,
 } from "lucide-react";
+import { formatDateOnly } from "../../utils/dateTime";
 
 type SearchMode = "messages" | "sessions";
 type SearchScope = "all" | "content" | "session" | "tags";
@@ -35,6 +36,7 @@ export function SearchPage() {
     globalTagFilter,
     loadCrossProjectTags,
     setGlobalTagFilter,
+    timeZone,
   } = useAppStore();
   const [query, setQuery] = useState("");
   const [searchMode, setSearchMode] = useState<SearchMode>("messages");
@@ -320,7 +322,7 @@ export function SearchPage() {
                     </span>
                     {result.timestamp && (
                       <span className="text-xs text-muted-foreground ml-auto">
-                        {new Date(result.timestamp).toLocaleDateString()}
+                        {formatDateOnly(result.timestamp, timeZone)}
                       </span>
                     )}
                   </div>
@@ -414,7 +416,7 @@ export function SearchPage() {
                     </span>
                     {session.latestTimestamp && (
                       <span className="text-xs text-muted-foreground ml-auto">
-                        {new Date(session.latestTimestamp).toLocaleDateString()}
+                        {formatDateOnly(session.latestTimestamp, timeZone)}
                       </span>
                     )}
                   </div>

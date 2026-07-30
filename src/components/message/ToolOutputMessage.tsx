@@ -4,6 +4,7 @@ import { Terminal, ChevronDown, ChevronRight, Code, FileText, Copy, Check } from
 import { formatTime, stripAnsi, copyTextToClipboard } from "./utils";
 import { MarkdownContent } from "./MarkdownContent";
 import { useExpandAllControl } from "../common/ExpandAllContext";
+import { useAppStore } from "../../stores/appStore";
 
 interface Props {
   message: DisplayMessage;
@@ -160,6 +161,7 @@ export const ToolOutputMessage = memo(function ToolOutputMessage({
   showTimestamp,
   layout = "default",
 }: Props) {
+  const timeZone = useAppStore((state) => state.timeZone);
   const isThreadLayout = layout === "thread";
 
   return (
@@ -171,7 +173,7 @@ export const ToolOutputMessage = memo(function ToolOutputMessage({
           <span className="text-xs font-medium text-muted-foreground">Tool Output</span>
           {showTimestamp && message.timestamp && (
             <span className="text-xs text-muted-foreground">
-              {formatTime(message.timestamp)}
+              {formatTime(message.timestamp, timeZone)}
             </span>
           )}
         </div>

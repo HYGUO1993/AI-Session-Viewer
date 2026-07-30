@@ -12,6 +12,7 @@ import {
   Loader2,
 } from "lucide-react";
 import type { RecycledItem } from "../../types";
+import { formatDateTime } from "../../utils/dateTime";
 
 const REASON_LABELS: Record<string, string> = {
   ManualDelete: "手动删除",
@@ -63,20 +64,6 @@ function ReasonBadge({ reason }: { reason: string }) {
   );
 }
 
-function formatDate(iso: string): string {
-  try {
-    return new Date(iso).toLocaleString("zh-CN", {
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  } catch {
-    return iso;
-  }
-}
-
 export function RecyclebinPage() {
   const {
     recycledItems,
@@ -86,6 +73,7 @@ export function RecyclebinPage() {
     permanentlyDeleteItem,
     emptyRecyclebin,
     cleanupOrphanDirs,
+    timeZone,
   } = useAppStore();
 
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
@@ -278,7 +266,7 @@ export function RecyclebinPage() {
                         {item.projectName}
                       </span>
                     )}
-                    <span className="shrink-0">{formatDate(item.movedAt)}</span>
+                    <span className="shrink-0">{formatDateTime(item.movedAt, timeZone, "minute")}</span>
                   </div>
                 </div>
 

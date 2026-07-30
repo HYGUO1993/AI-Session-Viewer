@@ -1,4 +1,4 @@
-import { format } from "date-fns";
+import { formatDateTime } from "../../utils/dateTime";
 
 export async function copyTextToClipboard(text: string): Promise<boolean> {
   if (!text) return false;
@@ -33,12 +33,8 @@ export async function copyTextToClipboard(text: string): Promise<boolean> {
   }
 }
 
-export function formatTime(timestamp: string): string {
-  try {
-    return format(new Date(timestamp), "yyyy-MM-dd HH:mm:ss");
-  } catch {
-    return timestamp;
-  }
+export function formatTime(timestamp: string, timeZone = ""): string {
+  return formatDateTime(timestamp, timeZone);
 }
 
 export function stripControlChars(text: string): string {

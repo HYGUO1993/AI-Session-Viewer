@@ -19,7 +19,7 @@ import {
   CheckSquare,
   X,
 } from "lucide-react";
-import { formatDistanceToNow, format } from "date-fns";
+import { formatDistanceToNow } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { api } from "../../services/api";
 import { SessionMetaEditor } from "./SessionMetaEditor";
@@ -29,6 +29,7 @@ import { ScanProgressView } from "../common/ScanProgressView";
 import { ProjectSkillsPanel } from "../skills/ProjectSkillsPanel";
 import { saveExport, saveExportMany } from "../../services/exportHelpers";
 import type { ExportFormat, SessionIndexEntry } from "../../types";
+import { formatDateOnly, formatDateTime } from "../../utils/dateTime";
 
 declare const __IS_TAURI__: boolean;
 
@@ -55,6 +56,7 @@ export function SessionsPage() {
     removeBookmark,
     isBookmarked,
     bookmarks,
+    timeZone,
   } = useAppStore();
 
   const project = projects.find((p) => p.id === projectId);
@@ -190,12 +192,12 @@ export function SessionsPage() {
           ? formatDistanceToNow(new Date(s.modified), { addSuffix: true, locale: zhCN })
           : null,
         created: s.created
-          ? format(new Date(s.created), "yyyy-MM-dd HH:mm")
+          ? formatDateTime(s.created, timeZone, "minute")
           : null,
       });
     }
     return m;
-  }, [sessions]);
+  }, [sessions, timeZone]);
 
   const editSession = editingSession
     ? sessions.find((s) => s.sessionId === editingSession)
@@ -696,7 +698,7 @@ export function SessionsPage() {
                   </span>
                   {s.modified && (
                     <span className="text-xs text-muted-foreground/60 shrink-0">
-                      {new Date(s.modified).toLocaleDateString()}
+                      {formatDateOnly(s.modified, timeZone)}
                     </span>
                   )}
                 </label>

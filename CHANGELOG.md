@@ -4,6 +4,22 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.17.1] - 2026-07-30
+
+### Added
+
+- 设置弹窗新增「显示设置」页，时区默认跟随系统，也可选择浏览器支持的 IANA 时区；偏好保存在本地并即时应用到消息、账单、搜索、会话列表、无效项与回收站的绝对时间。
+
+### Fixed
+
+- 修复逐请求账单和会话账单直接截取 UTC 时间戳、在 UTC+8 环境比消息时间少 8 小时的问题；复制的 Markdown 账单同步使用所选时区。
+
+### Version
+
+- 将工作区版本统一提升到 `2.17.1`，同步 `package.json`、`package-lock.json`、`Cargo.lock`、`src-tauri/tauri.conf.json` 与 3 个 Cargo manifest。
+
+---
+
 ## [2.17.0] - 2026-07-30
 
 ### Added

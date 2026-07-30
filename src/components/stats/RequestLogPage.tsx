@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { useAppStore } from "../../stores/appStore";
 import type { RequestLogFilter, RequestRecord } from "../../types";
+import { formatShortDateTime } from "../../utils/dateTime";
 
 function formatTokens(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
@@ -35,14 +36,6 @@ function formatDuration(ms: number | null): string {
   return `${mins}m${secs}s`;
 }
 
-function formatTimestamp(ts: string): string {
-  if (!ts) return "—";
-  // ISO 8601: 2026-05-23T14:30:11.123Z → "05-23 14:30:11"
-  const date = ts.slice(5, 10);
-  const time = ts.slice(11, 19);
-  return `${date} ${time}`;
-}
-
 /** Truncate the middle of a path so the "interesting" tail is preserved. */
 function truncatePath(p: string, max = 32): string {
   if (p.length <= max) return p;
@@ -65,6 +58,7 @@ export function RequestLogPage() {
     setRequestLogFilter,
     projects,
     loadProjects,
+    timeZone,
   } = useAppStore();
 
   const initialFilter: RequestLogFilter = useMemo(() => ({
@@ -296,7 +290,7 @@ export function RequestLogPage() {
                   title={`${record.filePath}\n${record.timestamp}`}
                 >
                   <span className="text-muted-foreground font-mono">
-                    {formatTimestamp(record.timestamp)}
+                    {record.timestamp ? formatShortDateTime(record.timestamp, timeZone) : "—"}
                   </span>
                   <span className="truncate text-foreground">
                     {projectDisplay(projects, record.projectId)}

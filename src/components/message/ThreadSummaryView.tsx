@@ -82,7 +82,7 @@ function findFirstAssistantReply(node: ThreadDisplayNode): {
 /** Walk the entire tree and emit user nodes in preorder, tagging each with
  *  its closest user ancestor (parentUserMsgId) and depth in the user-only
  *  tree. */
-function flattenUserTree(roots: ThreadDisplayNode[]): UserThreadItem[] {
+function flattenUserTree(roots: ThreadDisplayNode[], timeZone: string): UserThreadItem[] {
   const out: UserThreadItem[] = [];
 
   // Pre-pass: count how many direct user-children each user has, by walking
@@ -105,7 +105,7 @@ function flattenUserTree(roots: ThreadDisplayNode[]): UserThreadItem[] {
         replyMsgId: replyMsg?.uuid ?? null,
         question: rawQuestion,
         questionPreview: limit(firstLine(rawQuestion), QUESTION_PREVIEW_LIMIT),
-        timestamp: node.message.timestamp ? formatTime(node.message.timestamp) : null,
+        timestamp: node.message.timestamp ? formatTime(node.message.timestamp, timeZone) : null,
         replyPreview: replyText
           ? limit(replyText, REPLY_PREVIEW_LIMIT)
           : reply?.hasTool
@@ -114,7 +114,7 @@ function flattenUserTree(roots: ThreadDisplayNode[]): UserThreadItem[] {
               ? "（回复为空）"
               : "（尚无回复）",
         replyModel: replyMsg?.model ?? null,
-        replyTimestamp: replyMsg?.timestamp ? formatTime(replyMsg.timestamp) : null,
+        replyTimestamp: replyMsg?.timestamp ? formatTime(replyMsg.timestamp, timeZone) : null,
         hasTool: reply?.hasTool ?? false,
         parentUserMsgId,
         depth: userDepth,
@@ -152,8 +152,9 @@ export const ThreadSummaryView = memo(function ThreadSummaryView({
   filePath,
   projectPath,
 }: ThreadSummaryViewProps) {
+  const timeZone = useAppStore((state) => state.timeZone);
   const { roots, isThreaded } = useMemo(() => buildMessageTree(messages), [messages]);
-  const items = useMemo(() => flattenUserTree(roots), [roots]);
+  const items = useMemo(() => flattenUserTree(roots, timeZone), [roots, timeZone]);
   const assistantName = source === "codex" ? "Codex" : "Claude";
 
   const terminalShell = useAppStore((state) => state.terminalShell);

@@ -14,6 +14,7 @@ import type {
   RecycledItem,
 } from "../types";
 import { api } from "../services/api";
+import { normalizeTimeZone } from "../utils/dateTime";
 
 /**
  * Window size for the progressive message view: how many messages we
@@ -42,8 +43,10 @@ interface AppState {
   // Display settings
   showTimestamp: boolean;
   showModel: boolean;
+  timeZone: string;
   toggleTimestamp: () => void;
   toggleModel: () => void;
+  setTimeZone: (timeZone: string) => void;
 
   // Terminal shell (Windows only)
   terminalShell: "cmd" | "powershell";
@@ -208,6 +211,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   showTimestamp: localStorage.getItem("showTimestamp") !== "false",
   showModel: localStorage.getItem("showModel") !== "false",
+  timeZone: normalizeTimeZone(localStorage.getItem("timeZone")),
   toggleTimestamp: () => {
     const next = !get().showTimestamp;
     localStorage.setItem("showTimestamp", String(next));
@@ -217,6 +221,12 @@ export const useAppStore = create<AppState>((set, get) => ({
     const next = !get().showModel;
     localStorage.setItem("showModel", String(next));
     set({ showModel: next });
+  },
+  setTimeZone: (timeZone) => {
+    const next = normalizeTimeZone(timeZone);
+    if (next) localStorage.setItem("timeZone", next);
+    else localStorage.removeItem("timeZone");
+    set({ timeZone: next });
   },
 
   terminalShell: (localStorage.getItem("terminalShell") === "powershell" ? "powershell" : "cmd") as "cmd" | "powershell",

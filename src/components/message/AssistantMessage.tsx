@@ -5,6 +5,7 @@ import { formatTime, cleanMessageText, stripAnsi, copyTextToClipboard } from "./
 import { ToolViewer } from "../chat/tool-viewers/ToolViewers";
 import { MarkdownContent } from "./MarkdownContent";
 import { useExpandAllControl } from "../common/ExpandAllContext";
+import { useAppStore } from "../../stores/appStore";
 
 interface Props {
   message: DisplayMessage;
@@ -27,6 +28,7 @@ export const AssistantMessage = memo(function AssistantMessage({
   threadHint,
   layout = "default",
 }: Props) {
+  const timeZone = useAppStore((state) => state.timeZone);
   const assistantName = source === "codex" ? "Codex" : "Claude";
   const iconColor = source === "codex" ? "text-green-500" : "text-orange-500";
   const iconBg = source === "codex" ? "bg-green-500/10" : "bg-orange-500/10";
@@ -90,7 +92,7 @@ export const AssistantMessage = memo(function AssistantMessage({
       )}
       {showTimestamp && message.timestamp && (
         <span className="text-xs text-muted-foreground">
-          {formatTime(message.timestamp)}
+          {formatTime(message.timestamp, timeZone)}
         </span>
       )}
     </>

@@ -358,6 +358,7 @@ export function MessagesPage() {
     searchResults,
     showTimestamp,
     showModel,
+    timeZone,
     toggleTimestamp,
     toggleModel,
     refreshInBackground,
@@ -784,11 +785,11 @@ export function MessagesPage() {
           id,
           index: userIndex++,
           preview,
-          timestamp: msg.timestamp ? formatTime(msg.timestamp) : null,
+          timestamp: msg.timestamp ? formatTime(msg.timestamp, timeZone) : null,
         };
       })
       .filter(Boolean) as Array<{ id: string; index: number; preview: string; timestamp: string | null }>;
-  }, [displayedMessages]);
+  }, [displayedMessages, timeZone]);
 
   const userMessageIds = useMemo(() => userDots.map((d) => d.id), [userDots]);
   const activeUserMsgId = useActiveUserMessage(containerRef, userMessageIds);

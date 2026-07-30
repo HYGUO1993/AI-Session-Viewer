@@ -14,6 +14,8 @@ import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { ToolViewer, normalizeToolName } from "./tool-viewers/ToolViewers";
 import { cleanMessageText, wrapAsciiArt } from "../message/utils";
 import { useExpandAllControl } from "../common/ExpandAllContext";
+import { useAppStore } from "../../stores/appStore";
+import { formatDateTime } from "../../utils/dateTime";
 
 interface Props {
   message: ChatMessage;
@@ -131,6 +133,7 @@ export const StreamingMessage = memo(function StreamingMessage({
   onSubmitAnswers,
   interactiveQuestions,
 }: Props) {
+  const timeZone = useAppStore((state) => state.timeZone);
   if (message.role === "system") {
     return <SystemMsg message={message} />;
   }
@@ -139,6 +142,7 @@ export const StreamingMessage = memo(function StreamingMessage({
       <UserMsg
         message={message}
         showTimestamp={showTimestamp}
+        timeZone={timeZone}
         linkedToolUseIds={linkedToolUseIds}
       />
     );
@@ -148,6 +152,7 @@ export const StreamingMessage = memo(function StreamingMessage({
       <AssistantMsg
         message={message}
         showTimestamp={showTimestamp}
+        timeZone={timeZone}
         showModel={showModel}
         toolResultMap={toolResultMap}
         onSubmitAnswers={onSubmitAnswers}
@@ -284,10 +289,12 @@ function UserMsg({
   message,
   showTimestamp,
   linkedToolUseIds,
+  timeZone,
 }: {
   message: ChatMessage;
   showTimestamp?: boolean;
   linkedToolUseIds?: Set<string>;
+  timeZone: string;
 }) {
   return (
     <div className="flex justify-end">
@@ -295,7 +302,7 @@ function UserMsg({
         {showTimestamp && message.timestamp && (
           <div className="flex items-center justify-end gap-2 mb-1">
             <span className="text-xs text-muted-foreground">
-              {formatTime(message.timestamp)}
+              {formatDateTime(message.timestamp, timeZone)}
             </span>
           </div>
         )}
@@ -346,6 +353,7 @@ function AssistantMsg({
   toolResultMap,
   onSubmitAnswers,
   interactiveQuestions,
+  timeZone,
 }: {
   message: ChatMessage;
   showTimestamp?: boolean;
@@ -353,6 +361,7 @@ function AssistantMsg({
   toolResultMap?: Map<string, ToolResultData>;
   onSubmitAnswers?: (answers: string) => void;
   interactiveQuestions?: boolean;
+  timeZone: string;
 }) {
   const { blocks: displayBlocks } = getToolDisplayState(message.content, toolResultMap);
 
@@ -371,7 +380,7 @@ function AssistantMsg({
           )}
           {showTimestamp && message.timestamp && (
             <span className="text-xs text-muted-foreground">
-              {formatTime(message.timestamp)}
+              {formatDateTime(message.timestamp, timeZone)}
             </span>
           )}
           {message.usage && (
@@ -596,23 +605,4 @@ function FallbackToolResult({ content, isError }: { content: string; isError: bo
       )}
     </div>
   );
-}
-
-/* ── Helpers ── */
-
-function formatTime(timestamp: string): string {
-  try {
-    const d = new Date(timestamp);
-    return d.toLocaleString("zh-CN", {
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-      hour12: false,
-    });
-  } catch {
-    return timestamp;
-  }
 }

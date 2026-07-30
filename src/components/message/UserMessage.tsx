@@ -5,6 +5,7 @@ import { formatTime, cleanMessageText, copyTextToClipboard } from "./utils";
 import { MarkdownContent } from "./MarkdownContent";
 import { useExpandAllControl } from "../common/ExpandAllContext";
 import { getQuestionHue } from "./questionPalette";
+import { useAppStore } from "../../stores/appStore";
 
 interface Props {
   message: DisplayMessage;
@@ -34,6 +35,7 @@ export const UserMessage = memo(function UserMessage({
   repliesExpanded,
   onToggleReplies,
 }: Props) {
+  const timeZone = useAppStore((state) => state.timeZone);
   const [copied, setCopied] = useState(false);
   const { expanded, setExpanded } = useExpandAllControl(true, { followGlobal: true });
   const hue = useMemo(
@@ -158,7 +160,7 @@ export const UserMessage = memo(function UserMessage({
               <span className={`text-[11px] font-medium ${hue ? hue.text : "text-primary/80"}`}>用户</span>
               {showTimestamp && message.timestamp && (
                 <span className="text-[11px] text-muted-foreground">
-                  {formatTime(message.timestamp)}
+                  {formatTime(message.timestamp, timeZone)}
                 </span>
               )}
               {hasReplyControl && (

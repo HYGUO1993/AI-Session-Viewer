@@ -15,6 +15,7 @@ import {
 import { api } from "../../services/api";
 import { useAppStore } from "../../stores/appStore";
 import type { ProjectEntry, SessionIndexEntry } from "../../types";
+import { formatDateTime } from "../../utils/dateTime";
 
 type CleanupGroup = {
   project: ProjectEntry;
@@ -56,21 +57,6 @@ function getGroupItemKeys(group: CleanupGroup, includeInvalidProject: boolean) {
 
 function getSessionTitle(session: SessionIndexEntry) {
   return session.alias || session.threadName || session.firstPrompt || session.sessionId || "未命名会话";
-}
-
-function formatDateTime(value: string | null) {
-  if (!value) return "未知时间";
-  try {
-    return new Date(value).toLocaleString("zh-CN", {
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  } catch {
-    return value;
-  }
 }
 
 async function mapWithConcurrencyLimit<T, R>(
@@ -121,7 +107,7 @@ function compareGroups(a: CleanupGroup, b: CleanupGroup): number {
 
 export function InvalidItemsPage() {
   const navigate = useNavigate();
-  const { source, loadProjects } = useAppStore();
+  const { source, loadProjects, timeZone } = useAppStore();
   const [groups, setGroups] = useState<CleanupGroup[]>([]);
   /** 仅在拉取项目列表那一刻为 true；扫描阶段不再阻塞 UI，进度由 scanProgress 反映。 */
   const [bootstrapping, setBootstrapping] = useState(false);
@@ -743,7 +729,7 @@ export function InvalidItemsPage() {
                         <span>项目 ID: {group.project.id}</span>
                         <span>总会话数: {group.project.sessionCount}</span>
                         {group.project.lastModified && (
-                          <span>最近更新: {formatDateTime(group.project.lastModified)}</span>
+                          <span>最近更新: {formatDateTime(group.project.lastModified, timeZone, "minute")}</span>
                         )}
                       </div>
                     </div>
@@ -870,7 +856,7 @@ export function InvalidItemsPage() {
                                   <span>Session ID: {session.sessionId}</span>
                                   <span>消息数: {session.messageCount}</span>
                                   {session.modified && (
-                                    <span>更新时间: {formatDateTime(session.modified)}</span>
+                                    <span>更新时间: {formatDateTime(session.modified, timeZone, "minute")}</span>
                                   )}
                                 </div>
                                 {isCorrupt && (

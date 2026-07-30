@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { DollarSign, X, Copy, Check, Receipt } from "lucide-react";
 import { useAppStore } from "../../stores/appStore";
 import type { RequestRecord, SessionCostSummary } from "../../types";
+import { formatShortDateTime } from "../../utils/dateTime";
 
 function formatTokens(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
@@ -15,11 +16,6 @@ function formatCost(usd: number): string {
   if (usd >= 0.01) return `$${usd.toFixed(3)}`;
   if (usd > 0) return `$${usd.toFixed(4)}`;
   return "$0";
-}
-
-function formatTimestamp(ts: string): string {
-  if (!ts) return "—";
-  return ts.slice(5, 19).replace("T", " ");
 }
 
 function formatDuration(ms: number | null): string {
@@ -82,9 +78,10 @@ function SessionCostModal({
   onClose: () => void;
 }) {
   const [copied, setCopied] = useState(false);
+  const timeZone = useAppStore((state) => state.timeZone);
 
   const handleCopy = async () => {
-    const md = buildMarkdownTable(summary);
+    const md = buildMarkdownTable(summary, timeZone);
     try {
       await navigator.clipboard.writeText(md);
       setCopied(true);
@@ -171,7 +168,7 @@ function SessionCostModal({
                   className="border-b border-border/40 hover:bg-accent/30 transition-colors"
                 >
                   <td className="px-3 py-1.5 font-mono text-muted-foreground">
-                    {formatTimestamp(r.timestamp)}
+                    {r.timestamp ? formatShortDateTime(r.timestamp, timeZone) : "—"}
                   </td>
                   <td className="px-3 py-1.5 font-mono text-[10.5px] truncate max-w-[14rem]">
                     {r.model}
@@ -223,12 +220,12 @@ function SummaryStat({
   );
 }
 
-function buildMarkdownTable(summary: SessionCostSummary): string {
+function buildMarkdownTable(summary: SessionCostSummary, timeZone: string): string {
   const header =
     "| 时间 | 模型 | input | cache 读 | cache 写 | output | 耗时 | 花费 |\n" +
     "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |\n";
   const rows = summary.requests
-    .map((r) => buildRow(r))
+    .map((r) => buildRow(r, timeZone))
     .join("\n");
   const footer =
     `\n\n**累计**: ${summary.requestCount} 次请求 · ${formatCost(summary.costUsd)}` +
@@ -239,9 +236,9 @@ function buildMarkdownTable(summary: SessionCostSummary): string {
   return header + rows + footer;
 }
 
-function buildRow(r: RequestRecord): string {
+function buildRow(r: RequestRecord, timeZone: string): string {
   return (
-    `| ${formatTimestamp(r.timestamp)} | \`${r.model}\` | ${formatTokens(r.inputTokens)} | ` +
+    `| ${r.timestamp ? formatShortDateTime(r.timestamp, timeZone) : "—"} | \`${r.model}\` | ${formatTokens(r.inputTokens)} | ` +
     `${r.cacheReadTokens > 0 ? formatTokens(r.cacheReadTokens) : "—"} | ` +
     `${r.cacheCreationTokens > 0 ? formatTokens(r.cacheCreationTokens) : "—"} | ` +
     `${formatTokens(r.outputTokens)} | ${formatDuration(r.durationMs)} | ${formatCost(r.costUsd)} |`
