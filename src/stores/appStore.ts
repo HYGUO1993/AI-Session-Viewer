@@ -14,7 +14,7 @@ import type {
   RecycledItem,
 } from "../types";
 import { api } from "../services/api";
-import { normalizeTimeZone } from "../utils/dateTime";
+import { getSystemTimeZone, normalizeTimeZone } from "../utils/dateTime";
 
 /**
  * Window size for the progressive message view: how many messages we
@@ -95,6 +95,7 @@ interface AppState {
   requestLog: RequestRecord[];
   requestLogTotal: number;
   requestLogTotalCost: number;
+  requestLogHasUnpricedUsage: boolean;
   requestLogLoading: boolean;
   requestLogFilter: RequestLogFilter;
 
@@ -198,6 +199,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       requestLog: [],
       requestLogTotal: 0,
       requestLogTotalCost: 0,
+      requestLogHasUnpricedUsage: false,
       requestLogLoading: false,
       projectCosts: [],
       projectCostsLoading: false,
@@ -264,6 +266,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   requestLog: [],
   requestLogTotal: 0,
   requestLogTotalCost: 0,
+  requestLogHasUnpricedUsage: false,
   requestLogLoading: false,
   requestLogFilter: { page: 0, pageSize: 500 },
 
@@ -674,13 +677,22 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   loadStats: async () => {
+    const requestSource = get().source;
+    const requestTimeZone = get().timeZone || getSystemTimeZone();
     set({ statsLoading: true, statsIsFirstBuild: null });
     try {
-      const tokenSummary = await api.getStats(get().source);
+      const tokenSummary = await api.getStats(requestSource, requestTimeZone);
+      if (
+        get().source !== requestSource ||
+        (get().timeZone || getSystemTimeZone()) !== requestTimeZone
+      ) return;
       set({ tokenSummary, statsLoading: false, statsIsFirstBuild: tokenSummary.isFirstBuild });
     } catch (e) {
       console.error("Failed to load stats:", e);
-      set({ statsLoading: false });
+      if (
+        get().source === requestSource &&
+        (get().timeZone || getSystemTimeZone()) === requestTimeZone
+      ) set({ statsLoading: false });
     }
   },
 
@@ -690,6 +702,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   loadRequestLog: async (filterOverride?: RequestLogFilter) => {
     const requestSource = get().source;
+    const requestTimeZone = get().timeZone || getSystemTimeZone();
     const filter: RequestLogFilter = {
       ...get().requestLogFilter,
       ...(filterOverride ?? {}),
@@ -699,17 +712,27 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
     set({ requestLogLoading: true });
     try {
-      const page = await api.getRequestLog(requestSource, filter);
-      if (get().source !== requestSource) return;
+      const page = await api.getRequestLog(requestSource, {
+        ...filter,
+        timeZone: requestTimeZone,
+      });
+      if (
+        get().source !== requestSource ||
+        (get().timeZone || getSystemTimeZone()) !== requestTimeZone
+      ) return;
       set({
         requestLog: page.records,
         requestLogTotal: page.total,
         requestLogTotalCost: page.totalCostUsd,
+        requestLogHasUnpricedUsage: page.hasUnpricedUsage,
         requestLogLoading: false,
       });
     } catch (e) {
       console.error("Failed to load request log:", e);
-      if (get().source === requestSource) {
+      if (
+        get().source === requestSource &&
+        (get().timeZone || getSystemTimeZone()) === requestTimeZone
+      ) {
         set({ requestLogLoading: false });
       }
     }

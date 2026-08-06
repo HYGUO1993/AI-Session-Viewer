@@ -8,16 +8,19 @@ use session_core::models::stats::{
 use session_core::stats::{self, RequestLogFilter};
 
 #[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct StatsQuery {
     pub source: String,
+    #[serde(default)]
+    pub time_zone: Option<String>,
 }
 
 pub async fn get_stats(
     Query(params): Query<StatsQuery>,
 ) -> Result<Json<TokenUsageSummary>, (StatusCode, String)> {
-    let source = params.source;
+    let StatsQuery { source, time_zone } = params;
     let result = tokio::task::spawn_blocking(move || {
-        stats::get_stats(&source)
+        stats::get_stats(&source, time_zone.as_deref())
     })
     .await
     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
@@ -44,6 +47,8 @@ pub struct RequestLogQuery {
     pub page: Option<usize>,
     #[serde(default)]
     pub page_size: Option<usize>,
+    #[serde(default)]
+    pub time_zone: Option<String>,
 }
 
 pub async fn get_request_log(
@@ -56,6 +61,7 @@ pub async fn get_request_log(
         start_date: params.start_date.filter(|s| !s.is_empty()),
         end_date: params.end_date.filter(|s| !s.is_empty()),
         model: params.model.filter(|s| !s.is_empty()),
+        time_zone: params.time_zone.filter(|s| !s.is_empty()),
     };
     let page = params.page.unwrap_or(0);
     let page_size = params.page_size.unwrap_or(200);

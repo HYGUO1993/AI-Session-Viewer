@@ -6,6 +6,7 @@ use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
+use chrono_tz::Tz;
 use parking_lot::Mutex;
 use rayon::prelude::*;
 use serde_json::Value;
@@ -1829,6 +1830,7 @@ pub fn collect_requests() -> Result<Vec<crate::models::stats::RequestRecord>, St
                 cache_creation_tokens: 0,
                 total_tokens: total,
                 cost_usd: cost,
+                is_priced: pricing::is_priced(&model),
                 duration_ms: None,
                 message_uuid: None,
             });
@@ -1840,7 +1842,7 @@ pub fn collect_requests() -> Result<Vec<crate::models::stats::RequestRecord>, St
 
 // ── Stats ──
 
-pub fn get_stats() -> Result<TokenUsageSummary, String> {
+pub fn get_stats(time_zone: Tz) -> Result<TokenUsageSummary, String> {
     use crate::models::pricing;
 
     let files = scan_all_session_files();
@@ -1848,13 +1850,11 @@ pub fn get_stats() -> Result<TokenUsageSummary, String> {
     let mut tokens_by_model: HashMap<String, u64> = HashMap::new();
     let mut cost_by_model: HashMap<String, f64> = HashMap::new();
     let mut daily_map: HashMap<String, DailyAccum> = HashMap::new();
+    let mut unpriced_models: HashSet<String> = HashSet::new();
     let mut session_count: u64 = 0;
-    let mut message_count: u64 = 0;
 
     for file_path in &files {
         session_count += 1;
-        let session_messages = count_messages(file_path) as u64;
-        message_count += session_messages;
 
         let meta = extract_session_meta(file_path);
         let model_provider = meta
@@ -1863,11 +1863,6 @@ pub fn get_stats() -> Result<TokenUsageSummary, String> {
             .unwrap_or_else(|| "unknown".to_string());
 
         let session_date = extract_date_from_path(file_path);
-        if let Some(date) = &session_date {
-            let entry = daily_map.entry(date.clone()).or_default();
-            entry.messages += session_messages;
-        }
-
         let events = extract_token_events(file_path);
         for ev in events {
             let cost =
@@ -1876,20 +1871,34 @@ pub fn get_stats() -> Result<TokenUsageSummary, String> {
             summary.total_output_tokens += ev.output_tokens;
             summary.total_tokens += ev.input_tokens + ev.output_tokens;
             summary.total_cost_usd += cost;
+            summary.message_count += 1;
             *tokens_by_model.entry(model_provider.clone()).or_insert(0) +=
                 ev.input_tokens + ev.output_tokens;
             *cost_by_model.entry(model_provider.clone()).or_insert(0.0) += cost;
+            let priced = pricing::is_priced(&model_provider);
+            if !priced {
+                unpriced_models.insert(model_provider.clone());
+            }
 
-            let date = ev
-                .timestamp
-                .get(..10)
-                .map(|s| s.to_string())
+            let date = crate::stats::date_in_time_zone(&ev.timestamp, time_zone)
                 .or_else(|| session_date.clone());
             if let Some(date) = date {
                 let entry = daily_map.entry(date).or_default();
+                entry.messages += 1;
                 entry.input += ev.input_tokens;
                 entry.output += ev.output_tokens;
                 entry.cost += cost;
+                *entry
+                    .tokens_by_model
+                    .entry(model_provider.clone())
+                    .or_insert(0) += ev.input_tokens + ev.output_tokens;
+                *entry
+                    .cost_by_model
+                    .entry(model_provider.clone())
+                    .or_insert(0.0) += cost;
+                if !priced {
+                    entry.unpriced_models.insert(model_provider.clone());
+                }
             }
         }
     }
@@ -1904,6 +1913,13 @@ pub fn get_stats() -> Result<TokenUsageSummary, String> {
             cache_creation_tokens: 0,
             total_tokens: b.input + b.output,
             cost_usd: b.cost,
+            tokens_by_model: b.tokens_by_model,
+            cost_by_model: b.cost_by_model,
+            unpriced_models: {
+                let mut models: Vec<String> = b.unpriced_models.into_iter().collect();
+                models.sort();
+                models
+            },
             message_count: b.messages,
             cache_hit_ratio_by_model: HashMap::new(),
         })
@@ -1912,9 +1928,10 @@ pub fn get_stats() -> Result<TokenUsageSummary, String> {
 
     summary.tokens_by_model = tokens_by_model;
     summary.cost_by_model = cost_by_model;
+    summary.unpriced_models = unpriced_models.into_iter().collect();
+    summary.unpriced_models.sort();
     summary.daily_tokens = daily_tokens;
     summary.session_count = session_count;
-    summary.message_count = message_count;
     Ok(summary)
 }
 
@@ -1924,8 +1941,10 @@ struct DailyAccum {
     output: u64,
     cost: f64,
     messages: u64,
+    tokens_by_model: HashMap<String, u64>,
+    cost_by_model: HashMap<String, f64>,
+    unpriced_models: HashSet<String>,
 }
-
 
 fn truncate_string(s: &str, max_len: usize) -> String {
     if s.len() <= max_len {

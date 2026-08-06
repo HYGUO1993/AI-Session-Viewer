@@ -4,8 +4,8 @@ use session_core::models::stats::{
 use session_core::stats::{self, RequestLogFilter};
 
 #[tauri::command]
-pub fn get_stats(source: String) -> Result<TokenUsageSummary, String> {
-    stats::get_stats(&source)
+pub fn get_stats(source: String, time_zone: Option<String>) -> Result<TokenUsageSummary, String> {
+    stats::get_stats(&source, time_zone.as_deref())
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -19,6 +19,7 @@ pub fn get_request_log(
     model: Option<String>,
     page: Option<usize>,
     page_size: Option<usize>,
+    time_zone: Option<String>,
 ) -> Result<RequestLogPage, String> {
     let filter = RequestLogFilter {
         source,
@@ -27,6 +28,7 @@ pub fn get_request_log(
         start_date: start_date.filter(|s| !s.is_empty()),
         end_date: end_date.filter(|s| !s.is_empty()),
         model: model.filter(|s| !s.is_empty()),
+        time_zone: time_zone.filter(|s| !s.is_empty()),
     };
     stats::get_request_log(filter, page.unwrap_or(0), page_size.unwrap_or(200))
 }

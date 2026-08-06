@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- 使用统计与逐请求账单的日期筛选统一使用「设置 → 显示设置」中的 IANA 时区；默认跟随用户系统时区，并正确处理 UTC 跨日与夏令时边界。
+- Claude 会话总数现在包含有用户消息但尚未产生 usage 的会话；区间模型用量改为精确按日聚合，不再按全历史比例估算。
+- 将 Claude `input_tokens` 明确标为「未缓存输入 Token」；未知模型费用显示「未定价」，不再误报 `$0`。
+
+### Changed
+
+- Claude 统计缓存升级至 v5，首次进入统计页会自动重建。
+
+---
+
 ## [2.17.2] - 2026-07-30
 
 ### Fixed

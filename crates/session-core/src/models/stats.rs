@@ -63,6 +63,8 @@ pub struct TokenUsageSummary {
     pub total_cost_usd: f64,
     pub tokens_by_model: HashMap<String, u64>,
     pub cost_by_model: HashMap<String, f64>,
+    /// Models present in the data but absent from the built-in price table.
+    pub unpriced_models: Vec<String>,
     pub daily_tokens: Vec<DailyTokenEntry>,
     pub session_count: u64,
     pub message_count: u64,
@@ -81,6 +83,9 @@ pub struct DailyTokenEntry {
     pub cache_creation_tokens: u64,
     pub total_tokens: u64,
     pub cost_usd: f64,
+    pub tokens_by_model: HashMap<String, u64>,
+    pub cost_by_model: HashMap<String, f64>,
+    pub unpriced_models: Vec<String>,
     /// Number of assistant messages produced on this date.
     #[serde(default)]
     pub message_count: u64,
@@ -108,6 +113,7 @@ pub struct RequestRecord {
     pub cache_creation_tokens: u64,
     pub total_tokens: u64,
     pub cost_usd: f64,
+    pub is_priced: bool,
     /// Milliseconds between the preceding user message and this assistant
     /// message. `None` when no user message preceded (sidechain, system).
     pub duration_ms: Option<u64>,
@@ -130,6 +136,7 @@ pub struct RequestLogPage {
     pub total_output_tokens: u64,
     pub total_cache_read_tokens: u64,
     pub total_cache_creation_tokens: u64,
+    pub has_unpriced_usage: bool,
 }
 
 /// Per-project cost / token totals used by the "项目花费排行" chart.
@@ -143,6 +150,7 @@ pub struct ProjectCostEntry {
     pub total_tokens: u64,
     pub cache_read_tokens: u64,
     pub cost_usd: f64,
+    pub has_unpriced_usage: bool,
 }
 
 /// Per-session cost summary used by the MessagesPage badge.

@@ -277,8 +277,8 @@ export async function globalSearch(
   return apiFetch("/api/search", { source, query, maxResults: String(maxResults), scope });
 }
 
-export async function getStats(source: string): Promise<TokenUsageSummary> {
-  return apiFetch("/api/stats", { source });
+export async function getStats(source: string, timeZone: string): Promise<TokenUsageSummary> {
+  return apiFetch("/api/stats", { source, timeZone });
 }
 
 export async function getRequestLog(
@@ -293,6 +293,7 @@ export async function getRequestLog(
   if (filter.model) params.model = filter.model;
   if (filter.page !== undefined) params.page = String(filter.page);
   if (filter.pageSize !== undefined) params.pageSize = String(filter.pageSize);
+  if (filter.timeZone) params.timeZone = filter.timeZone;
   return apiFetch("/api/stats/requests", params);
 }
 

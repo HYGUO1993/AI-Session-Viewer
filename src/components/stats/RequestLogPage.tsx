@@ -52,6 +52,7 @@ export function RequestLogPage() {
     requestLog,
     requestLogTotal,
     requestLogTotalCost,
+    requestLogHasUnpricedUsage,
     requestLogLoading,
     requestLogFilter,
     loadRequestLog,
@@ -60,7 +61,6 @@ export function RequestLogPage() {
     loadProjects,
     timeZone,
   } = useAppStore();
-
   const initialFilter: RequestLogFilter = useMemo(() => ({
     projectId: searchParams.get("projectId"),
     sessionId: searchParams.get("sessionId"),
@@ -80,7 +80,7 @@ export function RequestLogPage() {
     if (projects.length === 0) loadProjects();
     loadRequestLog(initialFilter);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [source]);
+  }, [source, timeZone]);
 
   const applyFilters = () => {
     const next: RequestLogFilter = {
@@ -165,7 +165,10 @@ export function RequestLogPage() {
             共 <span className="font-semibold text-foreground">{requestLogTotal.toLocaleString()}</span> 条
           </span>
           <span>
-            累计花费 <span className="font-semibold text-green-500">{formatCost(requestLogTotalCost)}</span>
+            累计花费{" "}
+            <span className="font-semibold text-green-500">
+              {requestLogHasUnpricedUsage ? "未定价" : formatCost(requestLogTotalCost)}
+            </span>
           </span>
         </div>
       </div>
@@ -318,7 +321,7 @@ export function RequestLogPage() {
                     {formatDuration(record.durationMs)}
                   </span>
                   <span className="text-right font-mono text-green-500 flex items-center justify-end gap-1">
-                    {formatCost(record.costUsd)}
+                    {record.isPriced ? formatCost(record.costUsd) : "未定价"}
                     <ExternalLink className="w-2.5 h-2.5 opacity-40" />
                   </span>
                 </button>

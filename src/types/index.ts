@@ -124,6 +124,7 @@ export interface TokenUsageSummary {
   totalCostUsd: number;
   tokensByModel: Record<string, number>;
   costByModel: Record<string, number>;
+  unpricedModels: string[];
   dailyTokens: DailyTokenEntry[];
   sessionCount: number;
   messageCount: number;
@@ -138,6 +139,9 @@ export interface DailyTokenEntry {
   cacheCreationTokens: number;
   totalTokens: number;
   costUsd: number;
+  tokensByModel: Record<string, number>;
+  costByModel: Record<string, number>;
+  unpricedModels: string[];
   messageCount: number;
   /** Per-model cache hit ratio for this day. */
   cacheHitRatioByModel: Record<string, number>;
@@ -157,6 +161,7 @@ export interface RequestRecord {
   cacheCreationTokens: number;
   totalTokens: number;
   costUsd: number;
+  isPriced: boolean;
   /** Milliseconds between the preceding user message and this assistant message. */
   durationMs: number | null;
   messageUuid: string | null;
@@ -173,6 +178,7 @@ export interface RequestLogPage {
   totalOutputTokens: number;
   totalCacheReadTokens: number;
   totalCacheCreationTokens: number;
+  hasUnpricedUsage: boolean;
 }
 
 export interface ProjectCostEntry {
@@ -183,6 +189,7 @@ export interface ProjectCostEntry {
   totalTokens: number;
   cacheReadTokens: number;
   costUsd: number;
+  hasUnpricedUsage: boolean;
 }
 
 export interface SessionCostSummary {
@@ -208,6 +215,7 @@ export interface RequestLogFilter {
   model?: string | null;
   page?: number;
   pageSize?: number;
+  timeZone?: string;
 }
 
 export interface SearchResult {

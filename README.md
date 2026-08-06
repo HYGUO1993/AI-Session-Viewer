@@ -226,7 +226,7 @@ environment:
 
 > 当前仅支持 Claude 与 Codex；Grok 本地历史不包含统一的 Token/花费字段，因此切换到 Grok 时隐藏此入口。
 
-汇总会话总数、消息总数、Input / Output / Cache 读写 Token 用量、**累计 USD 花费**与**缓存命中率**，提供每日（或按小时）用量柱状图、花费趋势、缓存命中率走势、项目花费排行、按模型分组消耗。
+汇总会话总数、请求总数、未缓存 Input / Output / Cache 读写 Token 用量、**累计 USD 花费**与**缓存命中率**，提供每日（或按小时）用量柱状图、花费趋势、缓存命中率走势、项目花费排行、按模型分组消耗。
 
 - **逐请求账单（`/stats/requests`）**：虚拟滚动表格列出每条 assistant 请求的 token / 耗时 / cost，支持项目 / 模型 / 起止日期筛选，URL 参数可分享；点击行直接跳到对应消息
 - **会话级账单徽标**：消息详情页顶栏 chip 显示本会话累计 cost + 请求次数，点击弹 Modal 看每条迷你账单，「复制 Markdown」一键导出表格
@@ -234,12 +234,13 @@ environment:
 - **缓存命中率走势**：按模型分线 + 60% 经验参考线，Legend 改为可点选 chip 切换显示 / 隐藏曲线
 - **「今天」自动按小时聚合**：单日筛选时图表自动切换为 24 小时桶视图，避免单点死图
 - **内置模型价格表**：Claude 3.x/4.x、GPT-5/4.x/4o、o1/o3/o4 主流模型；Anthropic cache_creation 1.25× / cache_read 0.10× 倍率自动应用
+- **未定价模型**：模型不在内置价格表时明确显示「未定价」，不再把未知费用显示成 `$0`
 - **性能**：进程内常驻 cache + Singleflight 节流 + 异步落盘 + Compact schema，57MB 大 cache 用户进入 Stats 页从 4-8 秒降到 ~50ms
 
 ### 显示设置
 
-- 时区默认跟随系统，也可在「设置 → 显示设置」中选择浏览器支持的 IANA 时区；消息、账单、搜索结果、会话列表和管理页面的绝对时间会统一按该时区显示
-- 时区偏好保存在浏览器本地，不改变 JSONL 中的 UTC 原始时间或后端统计数据
+- 时区默认跟随用户系统，也可在「设置 → 显示设置」中选择浏览器支持的 IANA 时区；消息、账单、搜索结果、会话列表、管理页面以及统计日期筛选统一使用该时区
+- 时区偏好保存在浏览器本地，不改变 JSONL 中的 UTC 原始时间；切换后统计数据会按新时区立即重新分日
 
 ### 应用内更新
 
@@ -434,8 +435,8 @@ Web 服务器暴露以下 REST API，可供自定义客户端调用：
 | POST | `/api/skills/import` | `scope, projectPath?, overwrite?, archiveName?` + *(zip body)* | 导入 skill 压缩包 |
 | DELETE | `/api/skills` | `scope, projectPath?, slug` | 删除全局 / 项目 skill |
 | GET | `/api/search` | `source, query, maxResults` | 全局搜索 |
-| GET | `/api/stats` | `source` | Token 统计汇总（含 cache / cost） |
-| GET | `/api/stats/requests` | `source, projectId?, sessionId?, startDate?, endDate?, model?, page?, pageSize?` | 逐请求账单分页查询 |
+| GET | `/api/stats` | `source, timeZone?` | Token 统计汇总（含 cache / cost，IANA 时区默认 UTC） |
+| GET | `/api/stats/requests` | `source, projectId?, sessionId?, startDate?, endDate?, model?, page?, pageSize?, timeZone?` | 按所选时区筛选逐请求账单 |
 | GET | `/api/stats/projects` | `source` | 项目花费排行（按 cost 降序） |
 | GET | `/api/stats/session` | `source, filePath` | 单会话累计账单 + 每条请求明细 |
 | PUT | `/api/sessions/meta` | *(JSON body)* | 更新会话别名和标签 |

@@ -102,8 +102,8 @@ export async function globalSearch(
   return invoke<SearchResult[]>("global_search", { source, query, maxResults, scope });
 }
 
-export async function getStats(source: string): Promise<TokenUsageSummary> {
-  return invoke<TokenUsageSummary>("get_stats", { source });
+export async function getStats(source: string, timeZone: string): Promise<TokenUsageSummary> {
+  return invoke<TokenUsageSummary>("get_stats", { source, timeZone });
 }
 
 export async function getRequestLog(
@@ -119,6 +119,7 @@ export async function getRequestLog(
     model: filter.model ?? null,
     page: filter.page ?? 0,
     pageSize: filter.pageSize ?? 200,
+    timeZone: filter.timeZone ?? null,
   });
 }
 

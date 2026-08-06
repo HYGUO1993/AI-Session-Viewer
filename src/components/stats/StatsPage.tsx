@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAppStore } from "../../stores/appStore";
 import { api } from "../../services/api";
 import type { RequestRecord } from "../../types";
+import { formatDateOnly, formatDateTime, getSystemTimeZone } from "../../utils/dateTime";
 import {
   BarChart,
   Bar,
@@ -36,31 +37,33 @@ type TimePreset = "today" | "week" | "month" | "30d" | "all" | "custom";
 function getDateRange(
   preset: TimePreset,
   customStart: string,
-  customEnd: string
+  customEnd: string,
+  timeZone: string,
 ): { start: string; end: string } {
   const now = new Date();
   const pad = (n: number) => String(n).padStart(2, "0");
   const fmt = (d: Date) =>
-    `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-  const today = fmt(now);
+    `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
+  const today = formatDateOnly(now, timeZone);
+  const todayDate = new Date(`${today}T00:00:00Z`);
 
   switch (preset) {
     case "today":
       return { start: today, end: today };
     case "week": {
-      const d = new Date(now);
-      const dayOfWeek = now.getDay(); // 0=Sunday
+      const d = new Date(todayDate);
+      const dayOfWeek = d.getUTCDay(); // 0=Sunday
       const daysFromMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
-      d.setDate(now.getDate() - daysFromMonday);
+      d.setUTCDate(d.getUTCDate() - daysFromMonday);
       return { start: fmt(d), end: today };
     }
     case "month": {
-      const d = new Date(now.getFullYear(), now.getMonth(), 1);
+      const d = new Date(Date.UTC(todayDate.getUTCFullYear(), todayDate.getUTCMonth(), 1));
       return { start: fmt(d), end: today };
     }
     case "30d": {
-      const d = new Date(now);
-      d.setDate(now.getDate() - 29);
+      const d = new Date(todayDate);
+      d.setUTCDate(d.getUTCDate() - 29);
       return { start: fmt(d), end: today };
     }
     case "custom":
@@ -110,12 +113,15 @@ interface BucketRow {
   total: number;
   cost: number;
   messages: number;
+  tokensByModel: Record<string, number>;
+  costByModel: Record<string, number>;
+  unpricedModels: Set<string>;
   /** Per-model cache hit ratio, %. */
   cacheRatioByModel: Record<string, number>;
 }
 
-/** Group request records into hourly buckets for the given UTC-day. */
-function bucketByHour(records: RequestRecord[]): BucketRow[] {
+/** Group request records into hourly buckets in the selected time zone. */
+function bucketByHour(records: RequestRecord[], timeZone: string): BucketRow[] {
   const buckets = new Map<number, BucketRow>();
   // Pre-seed all 24 hours so the chart shows a smooth axis instead of
   // collapsing to whichever hours had activity.
@@ -129,6 +135,9 @@ function bucketByHour(records: RequestRecord[]): BucketRow[] {
       total: 0,
       cost: 0,
       messages: 0,
+      tokensByModel: {},
+      costByModel: {},
+      unpricedModels: new Set(),
       cacheRatioByModel: {},
     });
   }
@@ -140,10 +149,8 @@ function bucketByHour(records: RequestRecord[]): BucketRow[] {
 
   for (const r of records) {
     if (!r.timestamp || r.timestamp.length < 13) continue;
-    // Use the local-time hour so the user sees their own clock.
-    const ts = new Date(r.timestamp);
-    if (Number.isNaN(ts.getTime())) continue;
-    const hour = ts.getHours();
+    const hour = Number(formatDateTime(r.timestamp, timeZone).slice(11, 13));
+    if (!Number.isInteger(hour)) continue;
     const bucket = buckets.get(hour);
     if (!bucket) continue;
     bucket.input += r.inputTokens;
@@ -153,6 +160,9 @@ function bucketByHour(records: RequestRecord[]): BucketRow[] {
     bucket.total += r.totalTokens;
     bucket.cost += r.costUsd;
     bucket.messages += 1;
+    bucket.tokensByModel[r.model] = (bucket.tokensByModel[r.model] ?? 0) + r.totalTokens;
+    bucket.costByModel[r.model] = (bucket.costByModel[r.model] ?? 0) + r.costUsd;
+    if (!r.isPriced) bucket.unpricedModels.add(r.model);
 
     const inputSide = r.inputTokens + r.cacheReadTokens + r.cacheCreationTokens;
     if (inputSide > 0) {
@@ -209,6 +219,7 @@ export function StatsPage() {
     projectCosts,
     projectCostsLoading,
     loadProjectCosts,
+    timeZone,
   } = useAppStore();
   const [preset, setPreset] = useState<TimePreset>("all");
   const [customStart, setCustomStart] = useState("");
@@ -217,12 +228,17 @@ export function StatsPage() {
 
   useEffect(() => {
     loadStats();
+  }, [source, timeZone]);
+
+  useEffect(() => {
     loadProjectCosts();
   }, [source]);
 
+  const effectiveTimeZone = timeZone || getSystemTimeZone();
+
   const { start, end } = useMemo(
-    () => getDateRange(preset, customStart, customEnd),
-    [preset, customStart, customEnd]
+    () => getDateRange(preset, customStart, customEnd, effectiveTimeZone),
+    [preset, customStart, customEnd, effectiveTimeZone]
   );
 
   const isSingleDay = !!start && !!end && start === end;
@@ -250,6 +266,7 @@ export function StatsPage() {
           endDate: end,
           page: 0,
           pageSize: 100_000,
+          timeZone: effectiveTimeZone,
         });
         if (!cancelled) {
           setHourlyRecords(page.records);
@@ -266,14 +283,14 @@ export function StatsPage() {
     return () => {
       cancelled = true;
     };
-  }, [isSingleDay, source, start, end]);
+  }, [isSingleDay, source, start, end, effectiveTimeZone]);
 
   // Build the chart rows. Two paths:
   //  - single-day  → bucket by hour from the freshly fetched records
   //  - multi-day   → reuse the cached `dailyTokens` summary
   const bucketRows: BucketRow[] = useMemo(() => {
     if (isSingleDay) {
-      return bucketByHour(hourlyRecords);
+      return bucketByHour(hourlyRecords, effectiveTimeZone);
     }
     if (!tokenSummary) return [];
     const days = tokenSummary.dailyTokens.filter(
@@ -288,6 +305,9 @@ export function StatsPage() {
       total: d.totalTokens,
       cost: d.costUsd,
       messages: d.messageCount ?? 0,
+      tokensByModel: d.tokensByModel ?? {},
+      costByModel: d.costByModel ?? {},
+      unpricedModels: new Set(d.unpricedModels ?? []),
       cacheRatioByModel: Object.fromEntries(
         Object.entries(d.cacheHitRatioByModel ?? {}).map(([m, v]) => [
           m,
@@ -295,7 +315,7 @@ export function StatsPage() {
         ]),
       ),
     }));
-  }, [isSingleDay, hourlyRecords, tokenSummary, start, end]);
+  }, [isSingleDay, hourlyRecords, tokenSummary, start, end, effectiveTimeZone]);
 
   const filteredTotals = useMemo(() => {
     const totalTokens = bucketRows.reduce((s, d) => s + d.total, 0);
@@ -305,21 +325,17 @@ export function StatsPage() {
     const totalCacheCreation = bucketRows.reduce((s, d) => s + d.cacheCreation, 0);
     const totalCost = bucketRows.reduce((s, d) => s + d.cost, 0);
 
-    // Approximate per-model breakdown by scaling the cross-history totals
-    // proportionally to the share of tokens in the date window.
-    const ratio =
-      tokenSummary && tokenSummary.totalTokens > 0
-        ? totalTokens / tokenSummary.totalTokens
-        : 0;
     const tokensByModel: Record<string, number> = {};
     const costByModel: Record<string, number> = {};
-    if (tokenSummary) {
-      for (const [model, tokens] of Object.entries(tokenSummary.tokensByModel)) {
-        tokensByModel[model] = Math.round(tokens * ratio);
+    const unpricedModels = new Set<string>();
+    for (const bucket of bucketRows) {
+      for (const [model, tokens] of Object.entries(bucket.tokensByModel)) {
+        tokensByModel[model] = (tokensByModel[model] ?? 0) + tokens;
       }
-      for (const [model, cost] of Object.entries(tokenSummary.costByModel)) {
-        costByModel[model] = cost * ratio;
+      for (const [model, cost] of Object.entries(bucket.costByModel)) {
+        costByModel[model] = (costByModel[model] ?? 0) + cost;
       }
+      for (const model of bucket.unpricedModels) unpricedModels.add(model);
     }
 
     return {
@@ -331,8 +347,9 @@ export function StatsPage() {
       totalCost,
       tokensByModel,
       costByModel,
+      unpricedModels,
     };
-  }, [bucketRows, tokenSummary]);
+  }, [bucketRows]);
 
   const cacheTrend = useMemo(() => buildCacheTrend(bucketRows), [bucketRows]);
 
@@ -523,10 +540,10 @@ export function StatsPage() {
           icon={<MessageSquare className="w-5 h-5" />}
           label={
             isAllRange
-              ? "总消息数（全期）"
+              ? "总请求数（全期）"
               : isSingleDay
                 ? "当日请求数"
-                : "区间消息数"
+                : "区间请求数"
           }
           value={(isAllRange
             ? tokenSummary.messageCount
@@ -535,7 +552,7 @@ export function StatsPage() {
         />
         <StatCard
           icon={<Zap className="w-5 h-5" />}
-          label="输入 Token"
+          label="未缓存输入 Token"
           value={formatTokens(filteredTotals.totalInputTokens)}
         />
         <StatCard
@@ -550,7 +567,11 @@ export function StatsPage() {
         <StatCard
           icon={<DollarSign className="w-5 h-5" />}
           label="累计花费 (USD)"
-          value={formatCost(filteredTotals.totalCost)}
+          value={
+            filteredTotals.unpricedModels.size > 0
+              ? "未定价"
+              : formatCost(filteredTotals.totalCost)
+          }
           accent="text-green-500"
         />
         <StatCard
@@ -807,7 +828,7 @@ export function StatsPage() {
                     items?.[0]?.payload?.displayName ?? "") as any)
                 }
                 formatter={(value: number, _name: string, item) => [
-                  `${formatCost(value)} · ${item?.payload?.requestCount ?? 0} 次请求`,
+                  `${item?.payload?.hasUnpricedUsage ? "未定价" : formatCost(value)} · ${item?.payload?.requestCount ?? 0} 次请求`,
                   "花费",
                 ]}
               />
@@ -834,7 +855,6 @@ export function StatsPage() {
         <div className="bg-card border border-border rounded-lg p-4">
           <h2 className="text-sm font-medium mb-4">
             模型用量分布
-            <span className="text-xs font-normal text-muted-foreground ml-1">（按比例估算）</span>
           </h2>
           <div className="space-y-3">
             {modelBreakdown.map(({ model, tokens, cost, pct }) => (
@@ -842,7 +862,7 @@ export function StatsPage() {
                 <div className="flex items-center justify-between text-sm mb-1">
                   <span className="font-mono text-xs truncate mr-2">{model}</span>
                   <span className="text-muted-foreground text-xs shrink-0">
-                    {formatTokens(tokens)} · {formatCost(cost)} ({pct}%)
+                    {formatTokens(tokens)} · {filteredTotals.unpricedModels.has(model) ? "未定价" : formatCost(cost)} ({pct}%)
                   </span>
                 </div>
                 <div className="w-full bg-muted rounded-full h-2">

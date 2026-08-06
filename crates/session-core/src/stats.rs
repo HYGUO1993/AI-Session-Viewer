@@ -5,6 +5,8 @@ use std::fs;
 use std::sync::OnceLock;
 use std::time::{Duration, Instant, UNIX_EPOCH};
 
+use chrono::DateTime;
+use chrono_tz::Tz;
 use parking_lot::Mutex;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -19,12 +21,30 @@ use crate::provider::codex;
 
 // ── Public entry point ──────────────────────────────────────────────────────
 
-pub fn get_stats(source: &str) -> Result<TokenUsageSummary, String> {
+pub fn get_stats(source: &str, time_zone: Option<&str>) -> Result<TokenUsageSummary, String> {
+    let time_zone = parse_time_zone(time_zone)?;
     match source {
-        "claude" => get_claude_stats(),
-        "codex" => codex::get_stats(),
+        "claude" => get_claude_stats(time_zone),
+        "codex" => codex::get_stats(time_zone),
         _ => Err(format!("Unknown source: {}", source)),
     }
+}
+
+fn parse_time_zone(time_zone: Option<&str>) -> Result<Tz, String> {
+    time_zone
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or("UTC")
+        .parse::<Tz>()
+        .map_err(|_| format!("无效时区: {}", time_zone.unwrap_or("")))
+}
+
+pub(crate) fn date_in_time_zone(timestamp: &str, time_zone: Tz) -> Option<String> {
+    DateTime::parse_from_rfc3339(timestamp).ok().map(|value| {
+        value
+            .with_timezone(&time_zone)
+            .format("%Y-%m-%d")
+            .to_string()
+    })
 }
 
 /// Filter parameters for the paginated request log.
@@ -33,11 +53,12 @@ pub struct RequestLogFilter {
     pub source: String,
     pub project_id: Option<String>,
     pub session_id: Option<String>,
-    /// Inclusive YYYY-MM-DD lower bound (UTC).
+    /// Inclusive YYYY-MM-DD lower bound in `time_zone`.
     pub start_date: Option<String>,
-    /// Inclusive YYYY-MM-DD upper bound (UTC).
+    /// Inclusive YYYY-MM-DD upper bound in `time_zone`.
     pub end_date: Option<String>,
     pub model: Option<String>,
+    pub time_zone: Option<String>,
 }
 
 pub fn get_request_log(
@@ -45,11 +66,14 @@ pub fn get_request_log(
     page: usize,
     page_size: usize,
 ) -> Result<RequestLogPage, String> {
+    let time_zone = parse_time_zone(filter.time_zone.as_deref())?;
     // Codex still goes through the legacy path — its cache layout is
     // session-shaped, not record-shaped, and the volume is tiny.
     if filter.source == "codex" {
         let records = codex::collect_requests()?;
-        return Ok(paginate_records(records, &filter, page, page_size));
+        return Ok(paginate_records(
+            records, &filter, page, page_size, time_zone,
+        ));
     }
     if filter.source != "claude" {
         return Err(format!("Unknown source: {}", filter.source));
@@ -65,6 +89,7 @@ pub fn get_request_log(
         let mut total_output = 0u64;
         let mut total_cache_read = 0u64;
         let mut total_cache_creation = 0u64;
+        let mut has_unpriced_usage = false;
         // Collect indexes referencing live records to avoid clones until
         // we know which slice the caller wants.
         let mut hits: Vec<(&str, &CompactRecord, &FileStat)> = Vec::new();
@@ -81,16 +106,8 @@ pub fn get_request_log(
                         continue;
                     }
                 }
-                if let Some(start) = filter.start_date.as_deref() {
-                    if rec.t.as_str() < start {
-                        continue;
-                    }
-                }
-                if let Some(end) = filter.end_date.as_deref() {
-                    let date_prefix = rec.t.get(..10).unwrap_or(rec.t.as_str());
-                    if date_prefix > end {
-                        continue;
-                    }
+                if !date_matches_filter(&rec.t, &filter, time_zone) {
+                    continue;
                 }
                 if let Some(model) = filter.model.as_deref() {
                     if rec.m != model {
@@ -98,11 +115,12 @@ pub fn get_request_log(
                     }
                 }
                 matched_count += 1;
-                total_cost += rec.c;
+                total_cost += compact_cost(rec);
                 total_input += rec.i;
                 total_output += rec.o;
                 total_cache_read += rec.cr;
                 total_cache_creation += rec.cw;
+                has_unpriced_usage |= !pricing::is_priced(&rec.m);
                 hits.push((file_key.as_str(), rec, fs));
             }
         }
@@ -132,6 +150,7 @@ pub fn get_request_log(
             total_output_tokens: total_output,
             total_cache_read_tokens: total_cache_read,
             total_cache_creation_tokens: total_cache_creation,
+            has_unpriced_usage,
         })
     })
 }
@@ -142,6 +161,7 @@ fn paginate_records(
     filter: &RequestLogFilter,
     page: usize,
     page_size: usize,
+    time_zone: Tz,
 ) -> RequestLogPage {
     records.retain(|r| {
         if let Some(pid) = filter.project_id.as_deref() {
@@ -154,16 +174,8 @@ fn paginate_records(
                 return false;
             }
         }
-        if let Some(start) = filter.start_date.as_deref() {
-            if r.timestamp.as_str() < start {
-                return false;
-            }
-        }
-        if let Some(end) = filter.end_date.as_deref() {
-            let date_prefix = r.timestamp.get(..10).unwrap_or(r.timestamp.as_str());
-            if date_prefix > end {
-                return false;
-            }
+        if !date_matches_filter(&r.timestamp, filter, time_zone) {
+            return false;
         }
         if let Some(model) = filter.model.as_deref() {
             if r.model != model {
@@ -179,6 +191,7 @@ fn paginate_records(
     let total_output: u64 = records.iter().map(|r| r.output_tokens).sum();
     let total_cache_read: u64 = records.iter().map(|r| r.cache_read_tokens).sum();
     let total_cache_creation: u64 = records.iter().map(|r| r.cache_creation_tokens).sum();
+    let has_unpriced_usage = records.iter().any(|r| !r.is_priced);
 
     let start = page.saturating_mul(page_size);
     let end = start.saturating_add(page_size).min(total);
@@ -199,7 +212,25 @@ fn paginate_records(
         total_output_tokens: total_output,
         total_cache_read_tokens: total_cache_read,
         total_cache_creation_tokens: total_cache_creation,
+        has_unpriced_usage,
     }
+}
+
+fn date_matches_filter(timestamp: &str, filter: &RequestLogFilter, time_zone: Tz) -> bool {
+    if filter.start_date.is_none() && filter.end_date.is_none() {
+        return true;
+    }
+    let Some(date) = date_in_time_zone(timestamp, time_zone) else {
+        return false;
+    };
+    filter
+        .start_date
+        .as_deref()
+        .is_none_or(|start| date.as_str() >= start)
+        && filter
+            .end_date
+            .as_deref()
+            .is_none_or(|end| date.as_str() <= end)
 }
 
 pub fn get_project_costs(source: &str) -> Result<Vec<ProjectCostEntry>, String> {
@@ -224,12 +255,16 @@ pub fn get_project_costs(source: &str) -> Result<Vec<ProjectCostEntry>, String> 
                     total_tokens: 0,
                     cache_read_tokens: 0,
                     cost_usd: 0.0,
+                    has_unpriced_usage: false,
                 });
             entry.request_count += fs.message_count;
             entry.total_tokens +=
                 fs.input_tokens + fs.output_tokens + fs.cache_read_tokens + fs.cache_creation_tokens;
             entry.cache_read_tokens += fs.cache_read_tokens;
-            entry.cost_usd += fs.cost_usd;
+            for request in &fs.requests {
+                entry.cost_usd += compact_cost(request);
+                entry.has_unpriced_usage |= !pricing::is_priced(&request.m);
+            }
         }
         let mut list: Vec<ProjectCostEntry> = by_project.into_values().collect();
         list.sort_by(|a, b| {
@@ -255,11 +290,13 @@ fn codex_project_costs() -> Result<Vec<ProjectCostEntry>, String> {
                 total_tokens: 0,
                 cache_read_tokens: 0,
                 cost_usd: 0.0,
+                has_unpriced_usage: false,
             });
         entry.request_count += 1;
         entry.total_tokens += r.total_tokens;
         entry.cache_read_tokens += r.cache_read_tokens;
         entry.cost_usd += r.cost_usd;
+        entry.has_unpriced_usage |= !r.is_priced;
     }
     let mut list: Vec<ProjectCostEntry> = by_project.into_values().collect();
     list.sort_by(|a, b| {
@@ -414,17 +451,13 @@ struct UsageData {
 
 // ── Per-file cache ───────────────────────────────────────────────────────────
 
-/// CACHE_VERSION 4 (v2.14.x):
+/// CACHE_VERSION 5:
 ///   - `FileStat.requests` now uses `CompactRecord` with short field names
 ///     and no project/file/source redundancy (those are inferred from the
 ///     enclosing FileStat / cache key).
-///   - This drops the on-disk JSON size by roughly 2× on a representative
-///     cache; the IO win then compounds with the singleflight + in-memory
-///     guards added below.
-///
-/// Old v3 caches are dropped on first load (the user takes the rescan hit
-/// once, then enjoys the smaller faster cache forever).
-const CACHE_VERSION: u32 = 4;
+///   - Derived cost/model/day aggregates are rebuilt from requests so pricing
+///     and the selected time zone can change without rescanning JSONL files.
+const CACHE_VERSION: u32 = 5;
 
 #[derive(Serialize, Deserialize, Default, Clone)]
 struct AsvStatsCache {
@@ -449,17 +482,6 @@ struct FileStat {
     cache_read_tokens: u64,
     #[serde(default)]
     cache_creation_tokens: u64,
-    #[serde(default)]
-    cost_usd: f64,
-    /// model → total tokens
-    #[serde(default)]
-    tokens_by_model: HashMap<String, u64>,
-    /// model → cost USD
-    #[serde(default)]
-    cost_by_model: HashMap<String, f64>,
-    /// date (YYYY-MM-DD) → DailyBuckets
-    #[serde(default)]
-    daily: HashMap<String, DailyBuckets>,
     #[serde(default)]
     session_ids: Vec<String>,
     message_count: u64,
@@ -487,9 +509,6 @@ struct CompactRecord {
     /// cache_creation_tokens
     #[serde(default)]
     cw: u64,
-    /// cost_usd
-    #[serde(default)]
-    c: f64,
     /// duration_ms (user→assistant turnaround)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     d: Option<u64>,
@@ -508,8 +527,7 @@ fn compact_to_record(
     fs_entry: &FileStat,
     source: &str,
 ) -> RequestRecord {
-    let total =
-        rec.i + rec.o + rec.cr + rec.cw;
+    let total = rec.i + rec.o + rec.cr + rec.cw;
     RequestRecord {
         timestamp: rec.t.clone(),
         source: source.to_string(),
@@ -522,10 +540,15 @@ fn compact_to_record(
         cache_read_tokens: rec.cr,
         cache_creation_tokens: rec.cw,
         total_tokens: total,
-        cost_usd: rec.c,
+        cost_usd: compact_cost(rec),
+        is_priced: pricing::is_priced(&rec.m),
         duration_ms: rec.d,
         message_uuid: rec.u.clone(),
     }
+}
+
+fn compact_cost(rec: &CompactRecord) -> f64 {
+    pricing::compute_cost(&rec.m, rec.i, rec.cw, rec.cr, rec.o)
 }
 
 #[derive(Serialize, Deserialize, Clone, Default)]
@@ -536,6 +559,9 @@ struct DailyBuckets {
     cache_creation: u64,
     cost: f64,
     messages: u64,
+    tokens_by_model: HashMap<String, u64>,
+    cost_by_model: HashMap<String, f64>,
+    unpriced_models: HashSet<String>,
     /// model → (cache_read, total_input_side)
     /// Used to compute per-model cache hit ratio on this day without storing
     /// the full per-message split.
@@ -744,10 +770,10 @@ fn with_claude_cache<T>(f: impl FnOnce(&AsvStatsCache) -> T) -> T {
     f(&guard.cache)
 }
 
-fn get_claude_stats() -> Result<TokenUsageSummary, String> {
+fn get_claude_stats(time_zone: Tz) -> Result<TokenUsageSummary, String> {
     ensure_claude_cache_fresh()?;
     let mut guard = cache_state().lock();
-    let summary = merge_into_summary(&guard.cache);
+    let summary = merge_into_summary(&guard.cache, time_zone);
     // `is_first_build` is true exactly once, on the response that finishes
     // the very first scan. Subsequent calls report false.
     let was_first_build = guard.is_first_build && guard.pristine;
@@ -831,6 +857,10 @@ fn scan_file(path: &Path) -> Option<FileStat> {
             Err(_) => continue,
         };
 
+        if let Some(sid) = &record.session_id {
+            session_set.insert(sid.clone());
+        }
+
         if record.record_type == "user" {
             if let Some(ts) = record.timestamp.as_ref() {
                 last_user_ts = Some(ts.clone());
@@ -855,52 +885,15 @@ fn scan_file(path: &Path) -> Option<FileStat> {
 
         stat.message_count += 1;
 
-        if let Some(sid) = &record.session_id {
-            session_set.insert(sid.clone());
-        }
-
         let model = msg.model.clone().unwrap_or_else(|| "unknown".to_string());
         let timestamp = record.timestamp.clone().unwrap_or_default();
         let duration_ms = compute_duration_ms(last_user_ts.as_deref(), Some(timestamp.as_str()));
-
-        let cost = pricing::compute_cost(
-            &model,
-            usage.input_tokens,
-            usage.cache_creation_input_tokens,
-            usage.cache_read_input_tokens,
-            usage.output_tokens,
-        );
 
         // Aggregate totals
         stat.input_tokens += usage.input_tokens;
         stat.output_tokens += usage.output_tokens;
         stat.cache_read_tokens += usage.cache_read_input_tokens;
         stat.cache_creation_tokens += usage.cache_creation_input_tokens;
-        stat.cost_usd += cost;
-
-        let total_for_record = usage.input_tokens
-            + usage.output_tokens
-            + usage.cache_read_input_tokens
-            + usage.cache_creation_input_tokens;
-
-        *stat.tokens_by_model.entry(model.clone()).or_insert(0) += total_for_record;
-        *stat.cost_by_model.entry(model.clone()).or_insert(0.0) += cost;
-
-        if let Some(date) = timestamp.get(..10) {
-            let buckets = stat.daily.entry(date.to_string()).or_default();
-            buckets.input += usage.input_tokens;
-            buckets.output += usage.output_tokens;
-            buckets.cache_read += usage.cache_read_input_tokens;
-            buckets.cache_creation += usage.cache_creation_input_tokens;
-            buckets.cost += cost;
-            buckets.messages += 1;
-            let input_side =
-                usage.input_tokens + usage.cache_read_input_tokens + usage.cache_creation_input_tokens;
-            *buckets.per_model_cache_ratio_num.entry(model.clone()).or_insert(0) +=
-                usage.cache_read_input_tokens;
-            *buckets.per_model_cache_ratio_den.entry(model.clone()).or_insert(0) += input_side;
-        }
-
         // Per-request record for the 逐请求账单 view (compact form).
         let session_id = record.session_id.clone().filter(|s| !s.is_empty());
         stat.requests.push(CompactRecord {
@@ -910,7 +903,6 @@ fn scan_file(path: &Path) -> Option<FileStat> {
             o: usage.output_tokens,
             cr: usage.cache_read_input_tokens,
             cw: usage.cache_creation_input_tokens,
-            c: cost,
             d: duration_ms,
             s: session_id,
             u: record.uuid.clone(),
@@ -937,7 +929,7 @@ pub(crate) fn compute_duration_ms(start: Option<&str>, end: Option<&str>) -> Opt
 }
 
 /// Merge all per-file stats in the cache into a single TokenUsageSummary.
-fn merge_into_summary(cache: &AsvStatsCache) -> TokenUsageSummary {
+fn merge_into_summary(cache: &AsvStatsCache, time_zone: Tz) -> TokenUsageSummary {
     let mut total_input: u64 = 0;
     let mut total_output: u64 = 0;
     let mut total_cache_read: u64 = 0;
@@ -946,46 +938,56 @@ fn merge_into_summary(cache: &AsvStatsCache) -> TokenUsageSummary {
     let mut tokens_by_model: HashMap<String, u64> = HashMap::new();
     let mut cost_by_model: HashMap<String, f64> = HashMap::new();
     let mut daily_map: HashMap<String, DailyBuckets> = HashMap::new();
+    let mut unpriced_models: HashSet<String> = HashSet::new();
     let mut all_session_ids: HashSet<String> = HashSet::new();
     let mut message_count: u64 = 0;
 
     for stat in cache.files.values() {
-        total_input += stat.input_tokens;
-        total_output += stat.output_tokens;
-        total_cache_read += stat.cache_read_tokens;
-        total_cache_creation += stat.cache_creation_tokens;
-        total_cost += stat.cost_usd;
         message_count += stat.message_count;
 
         for sid in &stat.session_ids {
             all_session_ids.insert(sid.clone());
         }
-        for (model, tokens) in &stat.tokens_by_model {
-            *tokens_by_model.entry(model.clone()).or_insert(0) += tokens;
-        }
-        for (model, cost) in &stat.cost_by_model {
-            *cost_by_model.entry(model.clone()).or_insert(0.0) += cost;
-        }
-        for (date, bucket) in &stat.daily {
-            let merged = daily_map.entry(date.clone()).or_default();
-            merged.input += bucket.input;
-            merged.output += bucket.output;
-            merged.cache_read += bucket.cache_read;
-            merged.cache_creation += bucket.cache_creation;
-            merged.cost += bucket.cost;
-            merged.messages += bucket.messages;
-            for (model, n) in &bucket.per_model_cache_ratio_num {
-                *merged
-                    .per_model_cache_ratio_num
-                    .entry(model.clone())
-                    .or_insert(0) += n;
+        for request in &stat.requests {
+            let tokens = request.i + request.o + request.cr + request.cw;
+            let cost = compact_cost(request);
+            let priced = pricing::is_priced(&request.m);
+
+            total_input += request.i;
+            total_output += request.o;
+            total_cache_read += request.cr;
+            total_cache_creation += request.cw;
+            total_cost += cost;
+            *tokens_by_model.entry(request.m.clone()).or_insert(0) += tokens;
+            *cost_by_model.entry(request.m.clone()).or_insert(0.0) += cost;
+            if !priced {
+                unpriced_models.insert(request.m.clone());
             }
-            for (model, d) in &bucket.per_model_cache_ratio_den {
-                *merged
-                    .per_model_cache_ratio_den
-                    .entry(model.clone())
-                    .or_insert(0) += d;
+
+            let Some(date) = date_in_time_zone(&request.t, time_zone) else {
+                continue;
+            };
+            let bucket = daily_map.entry(date).or_default();
+            bucket.input += request.i;
+            bucket.output += request.o;
+            bucket.cache_read += request.cr;
+            bucket.cache_creation += request.cw;
+            bucket.cost += cost;
+            bucket.messages += 1;
+            *bucket.tokens_by_model.entry(request.m.clone()).or_insert(0) += tokens;
+            *bucket.cost_by_model.entry(request.m.clone()).or_insert(0.0) += cost;
+            if !priced {
+                bucket.unpriced_models.insert(request.m.clone());
             }
+            let input_side = request.i + request.cr + request.cw;
+            *bucket
+                .per_model_cache_ratio_num
+                .entry(request.m.clone())
+                .or_insert(0) += request.cr;
+            *bucket
+                .per_model_cache_ratio_den
+                .entry(request.m.clone())
+                .or_insert(0) += input_side;
         }
     }
 
@@ -1012,11 +1014,21 @@ fn merge_into_summary(cache: &AsvStatsCache) -> TokenUsageSummary {
                 cache_creation_tokens: bucket.cache_creation,
                 total_tokens: total,
                 cost_usd: bucket.cost,
+                tokens_by_model: bucket.tokens_by_model,
+                cost_by_model: bucket.cost_by_model,
+                unpriced_models: {
+                    let mut models: Vec<String> = bucket.unpriced_models.into_iter().collect();
+                    models.sort();
+                    models
+                },
                 message_count: bucket.messages,
                 cache_hit_ratio_by_model: ratio_by_model,
             }
         })
         .collect();
+
+    let mut unpriced_models: Vec<String> = unpriced_models.into_iter().collect();
+    unpriced_models.sort();
 
     TokenUsageSummary {
         total_input_tokens: total_input,
@@ -1027,6 +1039,7 @@ fn merge_into_summary(cache: &AsvStatsCache) -> TokenUsageSummary {
         total_cost_usd: total_cost,
         tokens_by_model,
         cost_by_model,
+        unpriced_models,
         daily_tokens,
         session_count: all_session_ids.len() as u64,
         message_count,
@@ -1044,9 +1057,30 @@ pub(crate) fn empty_summary() -> TokenUsageSummary {
         total_cost_usd: 0.0,
         tokens_by_model: HashMap::new(),
         cost_by_model: HashMap::new(),
+        unpriced_models: Vec::new(),
         daily_tokens: Vec::new(),
         session_count: 0,
         message_count: 0,
         is_first_build: false,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn groups_utc_timestamps_in_the_selected_time_zone() {
+        let shanghai: Tz = "Asia/Shanghai".parse().unwrap();
+        let new_york: Tz = "America/New_York".parse().unwrap();
+
+        assert_eq!(
+            date_in_time_zone("2026-08-05T16:30:00Z", shanghai).as_deref(),
+            Some("2026-08-06")
+        );
+        assert_eq!(
+            date_in_time_zone("2026-03-08T04:30:00Z", new_york).as_deref(),
+            Some("2026-03-07")
+        );
     }
 }
