@@ -40,6 +40,7 @@ src-tauri/gen/
 
 .spec-workflow/
 .playwright-mcp/
+.codegraph/
 
 # Design docs / specs (local only)
 docs/

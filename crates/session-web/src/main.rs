@@ -308,6 +308,14 @@ async fn main() {
             "/api/skills/sync-apply",
             post(routes::skills::apply_global_skill),
         )
+        .route(
+            "/api/sync/config-manifest",
+            get(routes::sync_config::get_manifest),
+        )
+        .route(
+            "/api/sync/mcp-apply",
+            post(routes::sync_config::apply_mcp),
+        )
         .route("/api/stats", get(routes::stats::get_stats))
         .route("/api/stats/requests", get(routes::stats::get_request_log))
         .route("/api/stats/projects", get(routes::stats::get_project_costs))

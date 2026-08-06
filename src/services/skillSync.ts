@@ -39,6 +39,29 @@ async function nodeFetch(
   return response;
 }
 
+export type McpClient = "claude" | "codex";
+
+export interface McpServerManifest {
+  client: McpClient;
+  name: string;
+  config: Record<string, unknown>;
+  redactedFields: string[];
+  hash: string;
+}
+
+export interface PluginManifestItem {
+  client: McpClient;
+  kind: "marketplace" | "plugin";
+  name: string;
+  version: string | null;
+  source: string | null;
+}
+
+export interface ConfigSyncManifest {
+  mcpServers: McpServerManifest[];
+  plugins: PluginManifestItem[];
+}
+
 export async function listNodeGlobalSkills(node: ViewerNode): Promise<SkillsResult> {
   return (await nodeFetch(node, "/api/skills")).json();
 }
@@ -67,4 +90,29 @@ export async function applyNodeGlobalSkill(
       body: archive,
     })
   ).json();
+}
+
+export async function getNodeConfigManifest(
+  node: ViewerNode,
+): Promise<ConfigSyncManifest> {
+  return (await nodeFetch(node, "/api/sync/config-manifest")).json();
+}
+
+export async function applyNodeMcpServer(
+  node: ViewerNode,
+  server: McpServerManifest,
+  expectedHash: string,
+  overwrite: boolean,
+): Promise<void> {
+  await nodeFetch(node, "/api/sync/mcp-apply", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      client: server.client,
+      name: server.name,
+      config: server.config,
+      expectedHash,
+      overwrite,
+    }),
+  });
 }

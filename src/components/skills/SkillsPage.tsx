@@ -9,6 +9,7 @@ import {
   AlertCircle,
   Upload,
   ArrowLeftRight,
+  Plug,
 } from "lucide-react";
 import { useAppStore } from "../../stores/appStore";
 import { api } from "../../services/api";
@@ -16,6 +17,7 @@ import type { SkillEntry, SkillsResult, SkillScope } from "../../types";
 import { SkillSection, SkillDetailModal, SkillDeleteConfirm } from "./SkillsView";
 import { ImportSkillsDialog } from "./ImportSkillsDialog";
 import { SkillSyncDialog } from "./SkillSyncDialog";
+import { ConfigSyncDialog } from "./ConfigSyncDialog";
 
 export function SkillsPage() {
   const projects = useAppStore((s) => s.projects);
@@ -30,6 +32,7 @@ export function SkillsPage() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [showImport, setShowImport] = useState(false);
   const [showSync, setShowSync] = useState(false);
+  const [showConfigSync, setShowConfigSync] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<SkillEntry | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -105,7 +108,7 @@ export function SkillsPage() {
               查看全局、插件与项目级 Skills（{totalCount}）
             </p>
           </div>
-          <div className="ml-auto flex items-center gap-2">
+          <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
             <select
               value={projectId}
               onChange={(e) => setProjectId(e.target.value)}
@@ -125,6 +128,13 @@ export function SkillsPage() {
             >
               <ArrowLeftRight className="w-3.5 h-3.5" />
               跨机同步
+            </button>
+            <button
+              onClick={() => setShowConfigSync(true)}
+              className="flex items-center gap-1 px-2.5 py-1.5 text-xs rounded-md border border-border bg-muted text-foreground hover:bg-accent/50 transition-colors"
+            >
+              <Plug className="w-3.5 h-3.5" />
+              MCP / 插件
             </button>
             <button
               onClick={() => setShowImport(true)}
@@ -220,6 +230,10 @@ export function SkillsPage() {
           onClose={() => setShowSync(false)}
           onSynced={() => setRefreshKey((key) => key + 1)}
         />
+      )}
+
+      {showConfigSync && (
+        <ConfigSyncDialog onClose={() => setShowConfigSync(false)} />
       )}
     </div>
   );

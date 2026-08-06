@@ -143,7 +143,7 @@ environment:
 - 桌面端连接远程节点时，文件夹选择和终端恢复按 Web 模式处理，避免误操作本机路径
 - 节点配置仅保存在当前客户端的 `localStorage`，不会上传到服务器
 - 多机统计当前按所选节点独立展示，不会静默合并
-- Skill、MCP 和插件安装声明同步的安全边界及实施顺序见 [`MULTI_NODE_SYNC_DESIGN.md`](./MULTI_NODE_SYNC_DESIGN.md)
+- Skill、MCP 和插件安装声明同步的安全边界见 [`MULTI_NODE_SYNC_DESIGN.md`](./MULTI_NODE_SYNC_DESIGN.md)
 
 ## 功能特性
 
@@ -288,7 +288,18 @@ environment:
 - **跨机同步**：显式选择源 `session-web` 和目标 `session-web`，预览全局 Skill 的新增/冲突项后逐项同步；同名覆盖前自动备份，写入后逐文件校验，失败则恢复旧版本
 - **删除**（仅全局 / 项目，插件只读不动）：悬停删除 + 二次确认；**符号链接只移除链接、保留原始文件**，真实目录永久删除并提示不可恢复
 
-跨机 Skill 备份保存在目标机器应用配置目录的 `ai-session-viewer/skill-backups/`。当前只同步 Claude 全局 Skill；项目 Skill、插件 cache、MCP 和插件安装声明仍按 [`MULTI_NODE_SYNC_DESIGN.md`](./MULTI_NODE_SYNC_DESIGN.md) 的安全边界分阶段接入。
+跨机 Skill 备份保存在目标机器应用配置目录的 `ai-session-viewer/skill-backups/`。当前只同步 Claude 全局 Skill；项目 Skill 和 Codex Skill 暂未接入。
+
+### MCP 与插件跨机配置
+
+Skills 页面中的「MCP / 插件」支持比较两个 `session-web` 节点的配置：
+
+- **MCP**：读取 Claude `~/.claude.json` 的 `mcpServers` 与 Codex `~/.codex/config.toml` 的 `mcp_servers`，支持新增和显式覆盖
+- **默认脱敏**：不传输名称匹配 `TOKEN`、`SECRET`、`PASSWORD`、`API_KEY`、`PRIVATE_KEY`、`AUTH` 的字段，也不传输 Bearer/Basic 凭据、URL 内嵌凭据、认证文件路径和机器绝对路径
+- **目标保护**：覆盖时保留目标节点已有敏感字段；配置在预览后发生变化会拒绝写入，写入前完整备份到 `ai-session-viewer/config-backups/`
+- **插件**：只预览 marketplace 与已安装插件的逻辑名称、版本和安全来源标识；不复制 cache、安装目录、下载产物或认证信息
+
+插件声明目前只读，因为项目还没有稳定的跨版本插件安装 API；目标节点需通过自己的 Claude/Codex 插件安装流程完成安装。
 
 ### 无效项管理
 

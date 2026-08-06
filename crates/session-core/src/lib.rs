@@ -17,3 +17,4 @@ pub mod search;
 pub mod skills;
 pub mod state;
 pub mod stats;
+pub mod sync_config;
