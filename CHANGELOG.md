@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+---
+
+## [2.18.0] - 2026-08-06
+
 ### Added
 
 - 支持注册和切换多个 `session-web` 节点，按节点保存 Bearer Token，并统一切换 HTTP、文件监听与 CLI 对话 WebSocket。
@@ -23,6 +27,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 ### Changed
 
 - Claude 统计缓存升级至 v5，首次进入统计页会自动重建。
+- CodeGraph 本地索引目录改由仓库根 `.gitignore` 整体排除，不再跟踪机器生成的索引文件。
+
+### Version
+
+- 将工作区版本统一提升到 `2.18.0`，同步 `package.json`、`package-lock.json`、`Cargo.lock`、`src-tauri/tauri.conf.json` 与 3 个 Cargo manifest。
 
 ---
 
