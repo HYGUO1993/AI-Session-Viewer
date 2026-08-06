@@ -1,5 +1,6 @@
 import { useEffect, useRef, useCallback } from "react";
 import { useAppStore } from "../stores/appStore";
+import { isRemoteNodeActive } from "../services/nodeConfig";
 
 declare const __IS_TAURI__: boolean;
 
@@ -25,7 +26,7 @@ export function useFileWatcher() {
   }, [refreshInBackground]);
 
   useEffect(() => {
-    if (__IS_TAURI__) {
+    if (__IS_TAURI__ && !isRemoteNodeActive()) {
       let unlisten: (() => void) | undefined;
       import("@tauri-apps/api/event").then(({ listen }) => {
         listen<string[]>("fs-change", handleChange).then((fn) => {

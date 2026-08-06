@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+### Added
+
+- 支持注册和切换多个 `session-web` 节点，按节点保存 Bearer Token，并统一切换 HTTP、文件监听与 CLI 对话 WebSocket。
+- 侧边栏新增机器选择和连接状态检查；Tauri 连接远程节点时自动切换为 Web 传输行为。
+- 全局 Skill 支持显式源节点到目标节点同步，提供冲突预览、覆盖前 ZIP 备份、写入校验和失败恢复。
+
 ### Fixed
 
 - 使用统计与逐请求账单的日期筛选统一使用「设置 → 显示设置」中的 IANA 时区；默认跟随用户系统时区，并正确处理 UTC 跨日与夏令时边界。

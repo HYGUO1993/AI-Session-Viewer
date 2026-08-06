@@ -15,8 +15,10 @@ import { normalizeToolName } from "./tool-viewers/ToolViewers";
 import { ScrollArea } from "../ScrollArea";
 import { subscribeToChatWebSocketMessages } from "../../services/webApi";
 import { isActualChatError } from "./chatError";
+import { isRemoteNodeActive } from "../../services/nodeConfig";
 
 declare const __IS_TAURI__: boolean;
+const USE_TAURI_TRANSPORT = __IS_TAURI__ && !isRemoteNodeActive();
 
 /** Enable virtual scrolling when there are more turns than this */
 const VIRTUAL_THRESHOLD = 30;
@@ -56,7 +58,7 @@ function usePaneChatStream(paneId: string, streamIdOverride: string | null) {
   useEffect(() => {
     if (!targetStreamId) return;
 
-    if (__IS_TAURI__) {
+    if (USE_TAURI_TRANSPORT) {
       const { addStreamLineToPane, setPaneStreaming, setPaneError } = useChatStore.getState();
       let cancelled = false;
 

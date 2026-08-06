@@ -27,9 +27,10 @@ import type {
   RestoreOptions,
   RestoreResult,
 } from "../types/providerSync";
+import { getApiBaseUrl, getApiToken } from "./nodeConfig";
 
 function getToken(): string | null {
-  return localStorage.getItem("asv_token");
+  return getApiToken();
 }
 
 function notifyAuthRequired(): void {
@@ -91,7 +92,7 @@ async function withAuthRetry(execute: () => Promise<Response>): Promise<Response
 
 async function probeWebSocketAuth(): Promise<void> {
   const resp = await withAuthRetry(() =>
-    fetch(new URL("/api/cli/detect", window.location.origin).toString(), {
+    fetch(new URL("/api/cli/detect", getApiBaseUrl()).toString(), {
       headers: applyAuthHeader({}),
     }),
   );
@@ -116,7 +117,7 @@ async function probeWebSocketAuth(): Promise<void> {
  */
 async function fetchWebSocketTicket(): Promise<string | null> {
   const resp = await withAuthRetry(() =>
-    fetch(new URL("/api/auth/ws-ticket", window.location.origin).toString(), {
+    fetch(new URL("/api/auth/ws-ticket", getApiBaseUrl()).toString(), {
       method: "POST",
       headers: applyAuthHeader({ "Content-Type": "application/json" }),
       body: "{}",
@@ -140,8 +141,8 @@ async function fetchWebSocketTicket(): Promise<string | null> {
 }
 
 export async function buildAuthenticatedWebSocketUrl(path: string): Promise<string> {
-  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-  const url = new URL(path, `${protocol}//${window.location.host}`);
+  const url = new URL(path, getApiBaseUrl());
+  url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
 
   // Only attempt to mint a ticket when a token is configured client-side.
   // Otherwise the server is in unauthenticated mode and a missing ticket
@@ -157,7 +158,7 @@ export async function buildAuthenticatedWebSocketUrl(path: string): Promise<stri
 }
 
 async function apiFetch<T>(path: string, params?: Record<string, string>): Promise<T> {
-  const url = new URL(path, window.location.origin);
+  const url = new URL(path, getApiBaseUrl());
   if (params) {
     for (const [key, value] of Object.entries(params)) {
       url.searchParams.set(key, value);
@@ -181,7 +182,7 @@ async function apiFetch<T>(path: string, params?: Record<string, string>): Promi
 }
 
 async function apiDelete<T>(path: string, params?: Record<string, string>): Promise<T> {
-  const url = new URL(path, window.location.origin);
+  const url = new URL(path, getApiBaseUrl());
   if (params) {
     for (const [key, value] of Object.entries(params)) {
       url.searchParams.set(key, value);
@@ -335,7 +336,7 @@ export async function exportSession(
   format: ExportFormat
 ): Promise<string> {
   // 导出端点返回 text/plain 正文（非 JSON），单独处理。
-  const url = new URL("/api/export", window.location.origin);
+  const url = new URL("/api/export", getApiBaseUrl());
   url.searchParams.set("source", source);
   url.searchParams.set("filePath", filePath);
   url.searchParams.set("format", format);
@@ -373,7 +374,7 @@ export async function listSkills(projectPath?: string | null): Promise<SkillsRes
 
 export async function getSkillContent(path: string): Promise<string> {
   // 内容端点返回 text/plain 正文（非 JSON），单独处理。
-  const url = new URL("/api/skills/content", window.location.origin);
+  const url = new URL("/api/skills/content", getApiBaseUrl());
   url.searchParams.set("path", path);
   const resp = await withAuthRetry(() =>
     fetch(url.toString(), { headers: applyAuthHeader({}) }),
@@ -408,7 +409,7 @@ export async function importSkills(
   if (typeof archive === "string") {
     throw new Error("Web 模式导入需要选择文件");
   }
-  const url = new URL("/api/skills/import", window.location.origin);
+  const url = new URL("/api/skills/import", getApiBaseUrl());
   url.searchParams.set("scope", scope);
   if (projectPath) url.searchParams.set("projectPath", projectPath);
   url.searchParams.set("overwrite", String(overwrite));
@@ -432,7 +433,7 @@ export async function importSkills(
 }
 
 async function apiPut<T>(path: string, body: unknown): Promise<T> {
-  const url = new URL(path, window.location.origin).toString();
+  const url = new URL(path, getApiBaseUrl()).toString();
   const payload = JSON.stringify(body);
   const resp = await withAuthRetry(() =>
     fetch(url, {
@@ -520,7 +521,7 @@ export async function getInstallType(): Promise<"installed" | "portable"> {
 }
 
 async function apiPost<T>(path: string, body: unknown): Promise<T> {
-  const url = new URL(path, window.location.origin).toString();
+  const url = new URL(path, getApiBaseUrl()).toString();
   const payload = JSON.stringify(body);
   const resp = await withAuthRetry(() =>
     fetch(url, {
@@ -900,7 +901,7 @@ export async function restoreRecycledItem(id: string): Promise<void> {
 export async function permanentlyDeleteRecycledItem(id: string): Promise<void> {
   const url = new URL(
     `/api/recyclebin/${encodeURIComponent(id)}`,
-    window.location.origin,
+    getApiBaseUrl(),
   ).toString();
   const resp = await withAuthRetry(() =>
     fetch(url, { method: "DELETE", headers: applyAuthHeader({}) }),

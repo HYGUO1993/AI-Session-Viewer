@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { useChatStore } from "../stores/chatStore";
 import { subscribeToChatWebSocketMessages } from "../services/webApi";
 import { isActualChatError } from "../components/chat/chatError";
+import { isRemoteNodeActive } from "../services/nodeConfig";
 
 declare const __IS_TAURI__: boolean;
 
@@ -41,7 +42,7 @@ function handleWebChatMessage(rawMessage: string): void {
 }
 
 function ensureWebChatSubscription(): void {
-  if (__IS_TAURI__ || webChatSubscriptionInitialized) {
+  if ((__IS_TAURI__ && !isRemoteNodeActive()) || webChatSubscriptionInitialized) {
     return;
   }
 
@@ -62,7 +63,7 @@ export function useChatStream(sessionIdOverride?: string | null) {
   const cleanupRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
-    if (__IS_TAURI__) {
+    if (__IS_TAURI__ && !isRemoteNodeActive()) {
       const addStreamLine = useChatStore.getState().addStreamLine;
       const setStreaming = useChatStore.getState().setStreaming;
       const setError = useChatStore.getState().setError;

@@ -10,7 +10,7 @@
 
 use std::collections::HashSet;
 use std::fs;
-use std::io::Read;
+use std::io::{Read, Write};
 use std::path::{Component, Path, PathBuf};
 
 use crate::models::skill::{ImportResult, SkillEntry, SkillsResult};
@@ -281,6 +281,183 @@ fn slug_is_safe(slug: &str) -> bool {
     matches!(comps.next(), Some(Component::Normal(_))) && comps.next().is_none()
 }
 
+fn append_skill_files(
+    zip: &mut zip::ZipWriter<std::io::Cursor<Vec<u8>>>,
+    root: &Path,
+    dir: &Path,
+) -> Result<(), String> {
+    let entries = fs::read_dir(dir).map_err(|e| format!("读取 skill 目录失败: {}", e))?;
+    let options = zip::write::SimpleFileOptions::default()
+        .compression_method(zip::CompressionMethod::Deflated);
+
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let meta =
+            fs::symlink_metadata(&path).map_err(|e| format!("读取 skill 文件信息失败: {}", e))?;
+        if meta.file_type().is_symlink() {
+            continue;
+        }
+        if meta.is_dir() {
+            append_skill_files(zip, root, &path)?;
+            continue;
+        }
+        if !meta.is_file() {
+            continue;
+        }
+
+        let name = path
+            .strip_prefix(root)
+            .map_err(|e| format!("生成 skill 相对路径失败: {}", e))?
+            .to_string_lossy()
+            .replace('\\', "/");
+        zip.start_file(name, options)
+            .map_err(|e| format!("创建 skill 压缩包失败: {}", e))?;
+        let mut file = fs::File::open(&path).map_err(|e| format!("读取 skill 文件失败: {}", e))?;
+        std::io::copy(&mut file, &mut *zip).map_err(|e| format!("写入 skill 压缩包失败: {}", e))?;
+    }
+    Ok(())
+}
+
+fn archive_skill_dir(target: &Path) -> Result<Vec<u8>, String> {
+    if !target.is_dir() || !target.join("SKILL.md").is_file() {
+        return Err("skill 目录无效或缺少 SKILL.md".to_string());
+    }
+    let root = fs::canonicalize(target).map_err(|e| format!("无法解析 skill 目录: {}", e))?;
+    let cursor = std::io::Cursor::new(Vec::new());
+    let mut zip = zip::ZipWriter::new(cursor);
+    append_skill_files(&mut zip, &root, &root)?;
+    zip.finish()
+        .map(|cursor| cursor.into_inner())
+        .map_err(|e| format!("完成 skill 压缩包失败: {}", e))
+}
+
+fn archive_file_map(archive: &[u8]) -> Result<std::collections::BTreeMap<String, Vec<u8>>, String> {
+    let mut zip = zip::ZipArchive::new(std::io::Cursor::new(archive))
+        .map_err(|e| format!("无法校验 skill 压缩包: {}", e))?;
+    let mut files = std::collections::BTreeMap::new();
+    for index in 0..zip.len() {
+        let mut file = zip
+            .by_index(index)
+            .map_err(|e| format!("读取 skill 校验文件失败: {}", e))?;
+        if file.is_dir() {
+            continue;
+        }
+        let Some(path) = file.enclosed_name() else {
+            return Err("skill 压缩包包含非法路径".to_string());
+        };
+        let name = path.to_string_lossy().replace('\\', "/");
+        let mut bytes = Vec::new();
+        file.read_to_end(&mut bytes)
+            .map_err(|e| format!("读取 skill 校验内容失败: {}", e))?;
+        if files.insert(name.clone(), bytes).is_some() {
+            return Err(format!("skill 压缩包包含重复文件: {}", name));
+        }
+    }
+    Ok(files)
+}
+
+/// Export one writable skill as a root-level ZIP archive. A top-level
+/// symlink is materialized, while nested symlinks are skipped.
+pub fn export_skill_to_bytes(
+    scope: &str,
+    project_path: Option<&str>,
+    slug: &str,
+) -> Result<Vec<u8>, String> {
+    if !slug_is_safe(slug) {
+        return Err(format!("非法的 skill 名称: {}", slug));
+    }
+    archive_skill_dir(&skills_root_for_scope(scope, project_path)?.join(slug))
+}
+
+fn persist_skill_backup(slug: &str, bytes: &[u8]) -> Result<PathBuf, String> {
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    let dir = dirs::config_dir()
+        .ok_or_else(|| "无法定位应用配置目录".to_string())?
+        .join("ai-session-viewer")
+        .join("skill-backups")
+        .join(stamp.to_string());
+    fs::create_dir_all(&dir).map_err(|e| format!("创建 skill 备份目录失败: {}", e))?;
+    let path = dir.join(format!("{}.zip", slug));
+    fs::write(&path, bytes).map_err(|e| format!("写入 skill 备份失败: {}", e))?;
+    Ok(path)
+}
+
+/// Apply a single global skill received from another node. Existing content
+/// is archived first; failed extraction removes partial output and restores
+/// the backup through the same validated importer.
+pub fn apply_synced_global_skill(
+    archive: &[u8],
+    slug: &str,
+    overwrite: bool,
+) -> Result<ImportResult, String> {
+    if !slug_is_safe(slug) {
+        return Err(format!("非法的 skill 名称: {}", slug));
+    }
+    let expected_files = archive_file_map(archive)?;
+    if !expected_files.contains_key("SKILL.md")
+        || expected_files
+            .keys()
+            .any(|path| path != "SKILL.md" && path.ends_with("/SKILL.md"))
+    {
+        return Err("同步包必须只包含一个根级 SKILL.md".to_string());
+    }
+    let root = skills_root_for_scope("global", None)?;
+    let target = root.join(slug);
+    let previous = if fs::symlink_metadata(&target).is_ok() {
+        if !overwrite {
+            return Err(format!("目标已存在: {}", slug));
+        }
+        let bytes = archive_skill_dir(&target)?;
+        persist_skill_backup(slug, &bytes)?;
+        Some(bytes)
+    } else {
+        None
+    };
+
+    let archive_name = format!("{}.zip", slug);
+    let detail =
+        match import_skills_from_bytes(archive, "global", None, overwrite, Some(&archive_name)) {
+            Ok(result)
+                if result.errors.is_empty() && result.imported.iter().any(|item| item == slug) =>
+            {
+                match archive_skill_dir(&target).and_then(|bytes| archive_file_map(&bytes)) {
+                    Ok(actual_files) if actual_files == expected_files => return Ok(result),
+                    Ok(_) => "写入后校验不一致".to_string(),
+                    Err(error) => error,
+                }
+            }
+            Ok(result) if result.errors.is_empty() => "同步结果未包含目标 Skill".to_string(),
+            Ok(result) => result.errors.join("; "),
+            Err(error) => error,
+        };
+
+    if fs::symlink_metadata(&target).is_ok() {
+        let _ = remove_skill_entry(&target);
+    }
+    if let Some(previous) = previous {
+        let restored =
+            import_skills_from_bytes(&previous, "global", None, false, Some(&archive_name));
+        match restored {
+            Ok(restored)
+                if restored.errors.is_empty()
+                    && restored.imported.iter().any(|item| item == slug) => {}
+            Ok(restored) => {
+                return Err(format!(
+                    "同步失败且恢复备份不完整: {}",
+                    restored.errors.join("; ")
+                ));
+            }
+            Err(error) => {
+                return Err(format!("同步失败且恢复备份失败: {}", error));
+            }
+        }
+    }
+    Err(format!("同步 skill 失败: {}", detail))
+}
+
 /// Remove a symlink (the link itself, never its target).
 fn remove_symlink(path: &Path) -> Result<(), String> {
     #[cfg(windows)]
@@ -536,5 +713,30 @@ mod tests {
         assert!(!has_claude_skills_segment(Path::new(
             "/home/u/proj/.claude/agents/foo/SKILL.md"
         )));
+    }
+
+    #[test]
+    fn archives_skill_files_for_node_sync() {
+        let stamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!("asv-skill-sync-{}", stamp));
+        fs::create_dir_all(root.join("assets")).unwrap();
+        fs::write(root.join("SKILL.md"), "# test").unwrap();
+        fs::write(root.join("assets").join("note.txt"), "asset").unwrap();
+
+        let archive = archive_skill_dir(&root).unwrap();
+        let files = archive_file_map(&archive).unwrap();
+        assert_eq!(
+            files.get("SKILL.md").map(Vec::as_slice),
+            Some(&b"# test"[..])
+        );
+        assert_eq!(
+            files.get("assets/note.txt").map(Vec::as_slice),
+            Some(&b"asset"[..])
+        );
+
+        fs::remove_dir_all(root).unwrap();
     }
 }

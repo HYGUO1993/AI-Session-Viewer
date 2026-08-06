@@ -8,12 +8,14 @@ import {
   Loader2,
   AlertCircle,
   Upload,
+  ArrowLeftRight,
 } from "lucide-react";
 import { useAppStore } from "../../stores/appStore";
 import { api } from "../../services/api";
 import type { SkillEntry, SkillsResult, SkillScope } from "../../types";
 import { SkillSection, SkillDetailModal, SkillDeleteConfirm } from "./SkillsView";
 import { ImportSkillsDialog } from "./ImportSkillsDialog";
+import { SkillSyncDialog } from "./SkillSyncDialog";
 
 export function SkillsPage() {
   const projects = useAppStore((s) => s.projects);
@@ -27,6 +29,7 @@ export function SkillsPage() {
   const [active, setActive] = useState<SkillEntry | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [showImport, setShowImport] = useState(false);
+  const [showSync, setShowSync] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<SkillEntry | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -117,6 +120,13 @@ export function SkillsPage() {
               ))}
             </select>
             <button
+              onClick={() => setShowSync(true)}
+              className="flex items-center gap-1 px-2.5 py-1.5 text-xs rounded-md border border-border bg-muted text-foreground hover:bg-accent/50 transition-colors"
+            >
+              <ArrowLeftRight className="w-3.5 h-3.5" />
+              跨机同步
+            </button>
+            <button
               onClick={() => setShowImport(true)}
               className="flex items-center gap-1 px-2.5 py-1.5 text-xs rounded-md border border-border bg-muted text-foreground hover:bg-accent/50 transition-colors"
             >
@@ -202,6 +212,13 @@ export function SkillsPage() {
           defaultScope={projectPath ? "project" : "global"}
           onClose={() => setShowImport(false)}
           onImported={() => setRefreshKey((k) => k + 1)}
+        />
+      )}
+
+      {showSync && (
+        <SkillSyncDialog
+          onClose={() => setShowSync(false)}
+          onSynced={() => setRefreshKey((key) => key + 1)}
         />
       )}
     </div>

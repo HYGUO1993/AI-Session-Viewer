@@ -1,7 +1,7 @@
 use axum::body::Bytes;
 use axum::extract::Query;
 use axum::http::StatusCode;
-use axum::response::Json;
+use axum::response::{IntoResponse, Json, Response};
 use serde::Deserialize;
 use session_core::models::skill::{ImportResult, SkillsResult};
 use session_core::skills;
@@ -101,4 +101,41 @@ pub async fn import_skills(
     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     res.map(Json).map_err(|e| (StatusCode::BAD_REQUEST, e))
+}
+
+#[derive(Deserialize)]
+pub struct SyncSkillQuery {
+    pub slug: String,
+    #[serde(default)]
+    pub overwrite: bool,
+}
+
+pub async fn export_global_skill(
+    Query(params): Query<SyncSkillQuery>,
+) -> Result<Response, (StatusCode, String)> {
+    let bytes = tokio::task::spawn_blocking(move || {
+        skills::export_skill_to_bytes("global", None, &params.slug)
+    })
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+    .map_err(|e| (StatusCode::BAD_REQUEST, e))?;
+
+    Ok((
+        [(axum::http::header::CONTENT_TYPE, "application/zip")],
+        bytes,
+    )
+        .into_response())
+}
+
+pub async fn apply_global_skill(
+    Query(params): Query<SyncSkillQuery>,
+    body: Bytes,
+) -> Result<Json<ImportResult>, (StatusCode, String)> {
+    let result = tokio::task::spawn_blocking(move || {
+        skills::apply_synced_global_skill(&body, &params.slug, params.overwrite)
+    })
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    result.map(Json).map_err(|e| (StatusCode::BAD_REQUEST, e))
 }

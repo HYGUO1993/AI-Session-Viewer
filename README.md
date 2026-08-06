@@ -135,6 +135,16 @@ environment:
 | 文件监听 | Tauri 事件 | WebSocket 推送 |
 | 认证 | 不需要 | 可选 Bearer Token |
 
+### 多机节点
+
+侧边栏顶部可注册多个 `session-web` 地址、保存各节点独立的 Bearer Token，并显示当前节点连接状态。切换机器后，项目、会话、搜索、统计、文件监听和 CLI 对话会统一访问所选节点；桌面端的“本机”节点仍使用 Tauri IPC。
+
+- 远程节点必须填写 `http://` 或 `https://` 根地址，不接受 URL 内嵌账号密码
+- 桌面端连接远程节点时，文件夹选择和终端恢复按 Web 模式处理，避免误操作本机路径
+- 节点配置仅保存在当前客户端的 `localStorage`，不会上传到服务器
+- 多机统计当前按所选节点独立展示，不会静默合并
+- Skill、MCP 和插件安装声明同步的安全边界及实施顺序见 [`MULTI_NODE_SYNC_DESIGN.md`](./MULTI_NODE_SYNC_DESIGN.md)
+
 ## 功能特性
 
 ### 三数据源
@@ -275,7 +285,10 @@ environment:
 
 - **查看全文**：点击任一 skill 弹窗渲染完整 `SKILL.md`（Markdown，自动剥离 frontmatter），可复制路径
 - **导入压缩包**：选作用域（全局 / 当前项目）+ 选 `.zip` + 可勾「覆盖同名」；自动识别根级 `SKILL.md`（整包为一个 skill）或多个 `<子目录>/SKILL.md`（逐个导入），内置 zip-slip 防护
+- **跨机同步**：显式选择源 `session-web` 和目标 `session-web`，预览全局 Skill 的新增/冲突项后逐项同步；同名覆盖前自动备份，写入后逐文件校验，失败则恢复旧版本
 - **删除**（仅全局 / 项目，插件只读不动）：悬停删除 + 二次确认；**符号链接只移除链接、保留原始文件**，真实目录永久删除并提示不可恢复
+
+跨机 Skill 备份保存在目标机器应用配置目录的 `ai-session-viewer/skill-backups/`。当前只同步 Claude 全局 Skill；项目 Skill、插件 cache、MCP 和插件安装声明仍按 [`MULTI_NODE_SYNC_DESIGN.md`](./MULTI_NODE_SYNC_DESIGN.md) 的安全边界分阶段接入。
 
 ### 无效项管理
 

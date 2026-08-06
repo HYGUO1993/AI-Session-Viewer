@@ -11,6 +11,7 @@ import { useFileWatcher } from "../../hooks/useFileWatcher";
 import { UpdateIndicator } from "./UpdateIndicator";
 import { ProjectActionsMenu } from "../project/ProjectActionsMenu";
 import { DeleteProjectDialog } from "../project/DeleteProjectDialog";
+import { NodeSelector } from "./NodeSelector";
 import type { ProjectEntry } from "../../types";
 import { collapseDirectBuckets, DIRECT_GROUP_ID } from "../../utils/directChat";
 import {
@@ -128,6 +129,7 @@ export function Sidebar() {
         <h1 className="text-sm font-semibold text-foreground mb-3 text-center">
           AI Session Viewer
         </h1>
+        <NodeSelector />
         {/* Source Tabs */}
         <div className="flex rounded-lg bg-muted p-0.5">
           <button

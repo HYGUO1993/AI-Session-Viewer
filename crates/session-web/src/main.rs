@@ -300,6 +300,14 @@ async fn main() {
         .route("/api/skills", delete(routes::skills::delete_skill))
         .route("/api/skills/content", get(routes::skills::get_skill_content))
         .route("/api/skills/import", post(routes::skills::import_skills))
+        .route(
+            "/api/skills/sync-export",
+            get(routes::skills::export_global_skill),
+        )
+        .route(
+            "/api/skills/sync-apply",
+            post(routes::skills::apply_global_skill),
+        )
         .route("/api/stats", get(routes::stats::get_stats))
         .route("/api/stats/requests", get(routes::stats::get_request_log))
         .route("/api/stats/projects", get(routes::stats::get_project_costs))

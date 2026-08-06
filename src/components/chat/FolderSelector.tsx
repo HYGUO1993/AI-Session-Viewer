@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { FolderOpen, ChevronDown } from "lucide-react";
 import { useAppStore } from "../../stores/appStore";
+import { isRemoteNodeActive } from "../../services/nodeConfig";
 
 declare const __IS_TAURI__: boolean;
 
@@ -11,11 +12,12 @@ interface Props {
 }
 
 export function FolderSelector({ value, onChange, disabled }: Props) {
+  const usesLocalTauri = __IS_TAURI__ && !isRemoteNodeActive();
   const [showDropdown, setShowDropdown] = useState(false);
   const projects = useAppStore((s) => s.projects);
 
   const handleBrowse = async () => {
-    if (__IS_TAURI__) {
+    if (usesLocalTauri) {
       try {
         const { open } = await import("@tauri-apps/plugin-dialog");
         const selected = await open({ directory: true, multiple: false });
@@ -54,7 +56,7 @@ export function FolderSelector({ value, onChange, disabled }: Props) {
             </button>
           )}
         </div>
-        {__IS_TAURI__ && (
+        {usesLocalTauri && (
           <button
             onClick={handleBrowse}
             disabled={disabled}

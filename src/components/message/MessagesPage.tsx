@@ -23,8 +23,10 @@ import type { ChatMessage } from "../../types/chat";
 import { ExpandAllProvider } from "../common/ExpandAllContext";
 import { useReplyNotification } from "../../hooks/useReplyNotification";
 import { SessionCostBadge } from "./SessionCostBadge";
+import { isRemoteNodeActive } from "../../services/nodeConfig";
 
 declare const __IS_TAURI__: boolean;
+const USE_TAURI_TRANSPORT = __IS_TAURI__ && !isRemoteNodeActive();
 type MessageSource = "claude" | "codex" | "grok";
 type SplitDirection = "horizontal" | "vertical";
 
@@ -247,7 +249,7 @@ function usePaneChatStream(paneId: string, streamIdOverride?: string | null) {
   useEffect(() => {
     if (!targetStreamId) return;
 
-    if (__IS_TAURI__) {
+    if (USE_TAURI_TRANSPORT) {
       const addStreamLineToPane = useChatStore.getState().addStreamLineToPane;
       const setPaneStreaming = useChatStore.getState().setPaneStreaming;
       const setPaneError = useChatStore.getState().setPaneError;
@@ -908,7 +910,7 @@ export function MessagesPage() {
   const handleResume = async () => {
     if (!resolvedSessionId) return;
     setResumeError(null);
-    if (__IS_TAURI__) {
+    if (USE_TAURI_TRANSPORT) {
       const path = session?.projectPath || session?.cwd || project?.displayPath || chatProjectPath;
       if (!path) return;
       try {
@@ -1148,9 +1150,9 @@ export function MessagesPage() {
           <button
             onClick={handleResume}
             className="ml-1 px-3 py-1.5 text-xs bg-primary text-primary-foreground rounded-md hover:bg-primary/90 flex items-center gap-1"
-            title={__IS_TAURI__ ? "在终端中恢复此会话" : "复制恢复命令"}
+            title={USE_TAURI_TRANSPORT ? "在终端中恢复此会话" : "复制恢复命令"}
           >
-            {__IS_TAURI__ ? (
+            {USE_TAURI_TRANSPORT ? (
               <><Play className="w-3 h-3" />Resume</>
             ) : (
               <>
@@ -1158,7 +1160,7 @@ export function MessagesPage() {
               </>
             )}
           </button>
-          {__IS_TAURI__ && (
+          {USE_TAURI_TRANSPORT && (
             <button
               onClick={handleCopyCommand}
               className="px-3 py-1.5 text-xs border border-border text-muted-foreground rounded-md hover:bg-accent hover:text-foreground flex items-center gap-1"

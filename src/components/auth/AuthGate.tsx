@@ -1,4 +1,9 @@
 import { useEffect, useRef, useState } from "react";
+import {
+  getApiToken,
+  isRemoteNodeActive,
+  setApiToken,
+} from "../../services/nodeConfig";
 
 declare const __IS_TAURI__: boolean;
 
@@ -7,24 +12,25 @@ declare const __IS_TAURI__: boolean;
  * the user for the API token, persists it to localStorage, and then closes.
  * Subsequent requests will pick up the new token via `getToken()`.
  *
- * In Tauri there is no token / no auth, so this component is a no-op.
+ * Local Tauri IPC needs no token; remote nodes still use this gate.
  *
  * Concurrent 401s collapse onto a single modal: while it's open, repeat
  * events are ignored. Once dismissed, the next event reopens it.
  */
 export function AuthGate() {
+  const usesLocalTauri = __IS_TAURI__ && !isRemoteNodeActive();
   const [open, setOpen] = useState(false);
   const [value, setValue] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
-    if (__IS_TAURI__) return;
+    if (usesLocalTauri) return;
 
     const handler = () => {
       setOpen((prev) => {
         if (prev) return prev;
-        const stored = localStorage.getItem("asv_token") ?? "";
+        const stored = getApiToken() ?? "";
         setValue(stored);
         return true;
       });
@@ -32,7 +38,7 @@ export function AuthGate() {
 
     window.addEventListener("asv-auth-required", handler);
     return () => window.removeEventListener("asv-auth-required", handler);
-  }, []);
+  }, [usesLocalTauri]);
 
   useEffect(() => {
     if (open) {
@@ -42,16 +48,12 @@ export function AuthGate() {
     }
   }, [open]);
 
-  if (__IS_TAURI__ || !open) return null;
+  if (usesLocalTauri || !open) return null;
 
   const handleSave = () => {
     setSubmitting(true);
     const trimmed = value.trim();
-    if (trimmed) {
-      localStorage.setItem("asv_token", trimmed);
-    } else {
-      localStorage.removeItem("asv_token");
-    }
+    setApiToken(trimmed);
     // Wake up any fetch that was waiting on a token via withAuthRetry.
     window.dispatchEvent(new CustomEvent("asv-auth-updated"));
     setSubmitting(false);

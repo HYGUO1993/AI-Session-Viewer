@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { useAppStore } from "../stores/appStore";
+import { isRemoteNodeActive } from "../services/nodeConfig";
 
 declare const __IS_TAURI__: boolean;
 
@@ -10,7 +11,7 @@ export function useBackgroundRefresh() {
   const { source, selectedProject, refreshInBackground } = useAppStore();
 
   useEffect(() => {
-    if (!__IS_TAURI__) return;
+    if (!__IS_TAURI__ || isRemoteNodeActive()) return;
 
     const initialTimer = setTimeout(() => {
       refreshInBackground(true);
