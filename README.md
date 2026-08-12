@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <strong>Claude Code、Codex CLI 与 Grok CLI 本地会话的统一可视化浏览器</strong>
+  <strong>Claude Code、Codex CLI、Grok CLI 与 WorkBuddy / CodeBuddy 本地会话的统一可视化浏览器</strong>
 </p>
 
 <p align="center">
@@ -22,13 +22,15 @@
 
 ---
 
-**AI Session Viewer** 是一个轻量级应用，让你可以在一个统一界面中浏览、搜索来自 [Claude Code](https://docs.anthropic.com/en/docs/claude-code)、[OpenAI Codex CLI](https://github.com/openai/codex) 和 Grok CLI 的本地会话，并支持一键恢复（Resume）到对应 CLI 中继续对话。
+**AI Session Viewer** 是一个轻量级应用，让你可以在一个统一界面中浏览、搜索来自 [Claude Code](https://docs.anthropic.com/en/docs/claude-code)、[OpenAI Codex CLI](https://github.com/openai/codex)、Grok CLI 与 **WorkBuddy / CodeBuddy** 的本地会话，并支持一键恢复（Resume）到对应 CLI 中继续对话。
 
 本应用**仅处理本地会话文件**，不上传任何数据；删除、标签、别名等写操作只在用户主动触发时执行。
 
 > **What's New（v2.17.2）**：新增“跟随系统 / IANA 时区”显示设置，消息、账单、搜索、会话列表与管理页面统一使用所选时区，修复 UTC+8 环境下账单时间少 8 小时的问题，并兼容 Rust 1.97 Clippy。完整版本历史见 [CHANGELOG.md](./CHANGELOG.md)。
 >
 > v2.15.x 起：在 **Codex desktop 中归档 / 删除的会话**残留为「(无标题)」幽灵条目已修复（删除对「文件已消失」幂等）；**会话导出**（JSON / Markdown / HTML，单个 + 批量）、**批量删除会话 / 项目**（移入回收站可还原）、**Codex 项目删除**；初次启动**扫描进度条** + 冷启动 rayon 限流给 UI 留一核，会话页 / 项目页全面**列表虚拟化**（`@tanstack/react-virtual`）。
+>
+> **What's New（v2.18.1）**：新增 **WorkBuddy / CodeBuddy 本地会话数据源**（侧边栏下拉选择器中的第 4 个数据源），读取 `~/.workbuddy/projects/` 下的会话文件，支持项目/会话浏览、搜索、导出、别名与标签、删除（移入回收站可还原）以及文本 / 推理 / 工具调用（function_call）内容块渲染。CodeBuddy 为只读浏览源，不接入 CLI 对话与 Token 统计。完整版本历史见 [CHANGELOG.md](./CHANGELOG.md)。
 
 ## 截图
 
@@ -59,9 +61,9 @@
 | macOS (Universal) | `.dmg`（同时支持 Intel 和 Apple Silicon） |
 | Linux | `.deb` / `.AppImage` |
 
-安装后打开即可使用，应用会自动扫描本地的 Claude / Codex / Grok 会话数据。
+安装后打开即可使用，应用会自动扫描本地的 Claude / Codex / Grok / CodeBuddy 会话数据。
 
-> 前提：至少使用过一种受支持 CLI，对应的 `~/.claude/projects/`、`~/.codex/sessions/` 或 `$GROK_HOME/sessions/`（默认 `~/.grok/sessions/`）目录存在。
+> 前提：至少使用过一种受支持 CLI，对应的 `~/.claude/projects/`、`~/.codex/sessions/`、`$GROK_HOME/sessions/`（默认 `~/.grok/sessions/`）或 `~/.workbuddy/projects/`（WorkBuddy / CodeBuddy）目录存在。
 
 ### Web 服务器
 
@@ -114,7 +116,7 @@ environment:
 
 > ⚠️ **安全警告**
 >
-> 应用会读取服务器上的 `~/.claude/projects/`、`~/.codex/sessions/` 和 `~/.grok/sessions/`，包含**完整会话记录（可能含 API Key、代码、隐私对话）**。务必按部署场景采取措施：
+> 应用会读取服务器上的 `~/.claude/projects/`、`~/.codex/sessions/`、`~/.grok/sessions/` 和 `~/.workbuddy/projects/`，包含**完整会话记录（可能含 API Key、代码、隐私对话）**。务必按部署场景采取措施：
 >
 > | 场景 | 建议措施 |
 > |------|---------|
@@ -147,15 +149,16 @@ environment:
 
 ## 功能特性
 
-### 三数据源
+### 四数据源
 
-侧边栏顶部 Tab 一键切换 Claude / Codex / Grok，切换时自动清理状态并重新加载，互不干扰。
+侧边栏顶部下拉选择器一键切换 Claude / Codex / Grok / CodeBuddy，切换时自动清理状态并重新加载，互不干扰。
 
 | 数据源 | CLI 工具 | 本地数据 | 特色内容块 |
 |--------|---------|---------|-----------|
 | **Claude**（橙色主题） | [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | `~/.claude/projects/` | Thinking、工具调用 |
 | **Codex**（绿色主题） | [Codex CLI](https://github.com/openai/codex) | `~/.codex/sessions/` | Reasoning、函数调用 |
 | **Grok**（紫色主题） | Grok CLI | `$GROK_HOME/sessions/` 或 `~/.grok/sessions/` | Reasoning、文本消息 |
+| **CodeBuddy**（蓝色主题） | WorkBuddy / CodeBuddy | `~/.workbuddy/projects/` | Reasoning、工具调用（function_call） |
 
 ### 项目浏览
 
@@ -194,11 +197,11 @@ environment:
 
 完整渲染会话所有消息，支持三种 AI 的内容块格式：
 
-| 内容块 | Claude | Codex | Grok | 渲染 |
-|-------|--------|-------|------|------|
-| 文本 | ✅ | ✅ | ✅ | Markdown + 语法高亮 |
-| 思考 / 推理过程 | ✅ Thinking | ✅ Reasoning | ✅ Reasoning | 可折叠 |
-| 工具 / 函数调用 | ✅ | ✅ | — | 名称、参数、返回结果 |
+| 内容块 | Claude | Codex | Grok | CodeBuddy | 渲染 |
+|-------|--------|-------|------|-----------|------|
+| 文本 | ✅ | ✅ | ✅ | ✅ | Markdown + 语法高亮 |
+| 思考 / 推理过程 | ✅ Thinking | ✅ Reasoning | ✅ Reasoning | ✅ Reasoning | 可折叠 |
+| 工具 / 函数调用 | ✅ | ✅ | — | ✅ function_call | 名称、参数、返回结果 |
 
 - 大会话（上千条消息）分页加载不卡顿，默认从最新消息开始
 - 向上滚动自动加载更早消息并保持滚动位置；首屏不足一屏时自动补页
@@ -234,7 +237,7 @@ environment:
 
 ### Token 统计与花费分析
 
-> 当前仅支持 Claude 与 Codex；Grok 本地历史不包含统一的 Token/花费字段，因此切换到 Grok 时隐藏此入口。
+> 当前仅支持 Claude 与 Codex；Grok 与 CodeBuddy 本地历史不包含统一的 Token/花费字段，因此切换到 Grok / CodeBuddy 时隐藏此入口。
 
 汇总会话总数、请求总数、未缓存 Input / Output / Cache 读写 Token 用量、**累计 USD 花费**与**缓存命中率**，提供每日（或按小时）用量柱状图、花费趋势、缓存命中率走势、项目花费排行、按模型分组消耗。
 
@@ -493,7 +496,7 @@ Web 服务器暴露以下 REST API，可供自定义客户端调用：
 
 ## 路线图
 
-- [x] 三数据源支持（Claude Code + Codex CLI + Grok CLI）
+- [x] 四数据源支持（Claude Code + Codex CLI + Grok CLI + WorkBuddy / CodeBuddy）
 - [x] 消息详情渲染（Markdown / 代码高亮 / 工具调用 / 思考过程）
 - [x] Resume 会话（跨平台终端启动）
 - [x] 全局搜索 + Token 统计面板
@@ -524,6 +527,7 @@ Web 服务器暴露以下 REST API，可供自定义客户端调用：
 - [x] 批量删除会话 / 项目（移入回收站可还原）+ 补齐 Codex 项目删除
 - [x] 冷启动扫描进度条 + rayon 限流留核给 UI + 会话/项目列表虚拟化（`@tanstack/react-virtual`）
 - [x] Skills 浏览 / 查看全文 / 导入压缩包 / 删除（全局 + 插件 + 项目级，软链安全 + zip-slip 防护）
+- [x] 第四数据源支持（WorkBuddy / CodeBuddy 本地会话浏览）
 
 ## Star History
 

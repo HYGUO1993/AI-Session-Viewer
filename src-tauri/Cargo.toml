@@ -1,7 +1,7 @@
 [package]
 name = "ai-session-viewer"
-version = "2.18.0"
-description = "A desktop app to browse Claude, Codex, and Grok session histories"
+version = "2.18.1"
+description = "A desktop app to browse Claude, Codex, Grok, and WorkBuddy / CodeBuddy session histories"
 authors = ["zuolan"]
 edition = "2021"
 

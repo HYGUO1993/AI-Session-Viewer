@@ -4,7 +4,28 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [2.18.1] - 2026-08-12
+
+### Added
+
+- 新增 WorkBuddy / CodeBuddy 本地会话数据源（侧边栏下拉选择器中的第 4 个数据源，蓝色主题）：读取 `~/.workbuddy/projects/<encoded-cwd>/<session-id>.jsonl`，解析 message / reasoning / function_call / function_call_result / ai-title 等多种记录类型，按项目目录聚合。
+- 完整接入会话浏览链路：桌面端与 Web 端均支持 CodeBuddy 项目/会话发现、手动刷新、从末尾分页、按消息区间跳转，以及文本消息、推理过程（Reasoning）与工具/函数调用（function_call 名称、参数、返回结果）内容块渲染。
+- 接入现有会话能力：CodeBuddy 会话支持全局搜索（标题、别名、标签和消息正文）、JSON / Markdown / HTML 导出、会话别名与标签，以及桌面/Web 文件监听后的自动刷新。
+- 接入删除生命周期：支持单会话、批量会话和项目删除；桌面端将完整会话目录移入应用回收站并支持恢复，Web 端删除前校验会话归属再删除完整会话目录。
+- 侧边栏原本的 3 个横排数据源 Tab 改为下拉选择器，新增数据源不再挤爆窄侧边栏。
+
+### Changed
+
+- CodeBuddy 为只读浏览源（同 Grok），暂不接入 CLI 对话、Token/花费统计与 Provider 同步；切换到 CodeBuddy 时隐藏这两个入口，不加载聊天模型，避免写入仅支持 Claude/Codex 的聊天状态。
+- README 与开发文档更新为四数据源架构，补充 CodeBuddy 数据目录、内容块、删除行为、Web 部署安全提示及当前能力边界。
+
+### Security
+
+- CodeBuddy 会话文件严格限制为数据根目录内的 `projects/<encoded-cwd>/<session-id>.jsonl`；Web 删除额外核对会话归属，防止路径越界或跨会话误删。
+
+### Version
+
+- 将工作区版本统一提升到 `2.18.1`，同步 `package.json`、`package-lock.json`、`Cargo.lock`、`src-tauri/tauri.conf.json` 与 3 个 Cargo manifest。
 
 ---
 
