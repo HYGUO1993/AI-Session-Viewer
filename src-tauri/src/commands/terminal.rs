@@ -50,6 +50,7 @@ pub fn resume_session(
         "claude" => format!("claude --resume {}", session_id),
         "codex" => format!("codex resume {}", session_id),
         "grok" => format!("grok -r {}", session_id),
+        "codebuddy" => format!("codebuddy --resume {}", session_id),
         _ => return Err(format!("Unknown source: {}", source)),
     };
 

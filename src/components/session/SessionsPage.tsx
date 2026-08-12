@@ -130,7 +130,9 @@ export function SessionsPage() {
       ? `claude --resume ${sessionId}`
       : source === "grok"
         ? `grok -r ${sessionId}`
-        : `codex resume ${sessionId}`;
+        : source === "codebuddy"
+          ? `codebuddy --resume ${sessionId}`
+          : `codex resume ${sessionId}`;
 
   const handleCopyCommand = async (e: React.MouseEvent, sessionId: string) => {
     e.preventDefault();

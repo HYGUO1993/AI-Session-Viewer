@@ -896,7 +896,9 @@ export function MessagesPage() {
       ? `claude --resume ${resolvedSessionId}`
       : source === "grok"
         ? `grok -r ${resolvedSessionId}`
-        : `codex resume ${resolvedSessionId}`;
+        : source === "codebuddy"
+          ? `codebuddy --resume ${resolvedSessionId}`
+          : `codex resume ${resolvedSessionId}`;
   };
 
   const handleCopyCommand = async (e: React.MouseEvent) => {
