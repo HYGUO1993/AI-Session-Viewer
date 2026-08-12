@@ -4,7 +4,8 @@ use axum::response::Json;
 use serde::Deserialize;
 use session_core::metadata;
 use session_core::models::session::SessionIndexEntry;
-use session_core::provider::{claude, codex, grok};
+use session_core::provider::{claude, codebuddy, codex, grok};
+use session_core::recyclebin;
 
 use crate::{resolve_claude_project_dir, resolve_session_file_path, SessionSource};
 
@@ -55,6 +56,7 @@ pub async fn get_sessions(
             "claude" => claude::get_sessions(&project_id)?,
             "codex" => codex::get_sessions(&project_id)?,
             "grok" => grok::get_sessions(&project_id)?,
+            "codebuddy" => codebuddy::get_sessions(&project_id)?,
             _ => return Err(format!("Unknown source: {}", source)),
         };
 
@@ -87,6 +89,7 @@ pub async fn get_invalid_sessions(
             "claude" => claude::get_invalid_sessions(&project_id)?,
             "codex" => codex::get_invalid_sessions(&project_id)?,
             "grok" => grok::get_invalid_sessions(&project_id)?,
+            "codebuddy" => codebuddy::get_invalid_sessions(&project_id)?,
             _ => return Err(format!("Unknown source: {}", source)),
         };
 
@@ -140,6 +143,7 @@ pub async fn delete_session(
                 SessionSource::Claude => claude::invalidate_cache(),
                 SessionSource::Codex => codex::invalidate_sessions_cache(),
                 SessionSource::Grok => grok::invalidate_sessions_cache(),
+                SessionSource::Codebuddy => codebuddy::invalidate_sessions_cache(),
             }
             return Ok(Json(()));
         }
@@ -232,6 +236,33 @@ pub async fn delete_session(
                 }
             }
         }
+        SessionSource::Codebuddy => {
+            let session_meta = codebuddy::extract_session_meta(&resolved_path).ok_or_else(|| {
+                (
+                    StatusCode::BAD_REQUEST,
+                    "Failed to read CodeBuddy session metadata".to_string(),
+                )
+            })?;
+
+            if let Some(ref pid) = project_id {
+                if session_meta.cwd.as_deref().unwrap_or("<codebuddy-unrooted>") != pid {
+                    return Err((
+                        StatusCode::BAD_REQUEST,
+                        "Session file does not belong to the requested CodeBuddy project"
+                            .to_string(),
+                    ));
+                }
+            }
+
+            if let Some(ref sid) = session_id {
+                if session_meta.id != *sid {
+                    return Err((
+                        StatusCode::BAD_REQUEST,
+                        "Session id does not match the requested CodeBuddy session file".to_string(),
+                    ));
+                }
+            }
+        }
     }
 
     tokio::task::spawn_blocking(move || {
@@ -241,6 +272,28 @@ pub async fn delete_session(
                 .ok_or_else(|| "Invalid Grok session path".to_string())?;
             std::fs::remove_dir_all(session_dir)
                 .map_err(|e| format!("Failed to delete Grok session: {}", e))?;
+        } else if source == "codebuddy" {
+            // Recycle the <uuid>.jsonl file; drop the sibling <uuid>/ subdir.
+            // Project id is the immediate parent directory name of the session file.
+            let project_id_str = resolved_path
+                .parent()
+                .and_then(|p| p.file_name())
+                .and_then(|n| n.to_str())
+                .unwrap_or("");
+            recyclebin::move_to_recyclebin(
+                &resolved_path,
+                "session",
+                "ManualDelete",
+                &source,
+                project_id_str,
+                None,
+                None,
+            )
+            .map_err(|e| format!("Failed to recycle CodeBuddy session: {}", e))?;
+            if let Some(parent) = resolved_path.parent() {
+                let sub = parent.join(resolved_path.file_stem().unwrap_or_default());
+                let _ = std::fs::remove_dir_all(sub);
+            }
         } else {
             std::fs::remove_file(&resolved_path)
                 .map_err(|e| format!("Failed to delete session: {}", e))?;

@@ -355,7 +355,7 @@ export function ChatPage({ paneId = DEFAULT_CHAT_PANE_ID }: ChatPageProps) {
 
   // Sync source from appStore into the target pane
   useEffect(() => {
-    if (appSource !== "grok") {
+    if (appSource !== "grok" && appSource !== "codebuddy") {
       setPaneSource(paneId, appSource);
     }
   }, [appSource, paneId, setPaneSource]);
@@ -371,7 +371,7 @@ export function ChatPage({ paneId = DEFAULT_CHAT_PANE_ID }: ChatPageProps) {
     clearPane(paneId);
   }, [clearPane, paneId, setPaneSessionId, urlSessionId]);
   useEffect(() => {
-    if (appSource === "grok") return;
+    if (appSource === "grok" || appSource === "codebuddy") return;
     if (appSource === "codex") {
       fetchCodexCliConfig();
       return;
@@ -380,7 +380,7 @@ export function ChatPage({ paneId = DEFAULT_CHAT_PANE_ID }: ChatPageProps) {
   }, [appSource, fetchCliConfig, fetchCodexCliConfig]);
   // Re-fetch model list whenever source changes (setSource clears modelList first)
   useEffect(() => {
-    if (appSource !== "grok") fetchModelList();
+    if (appSource !== "grok" && appSource !== "codebuddy") fetchModelList();
   }, [appSource, fetchModelList]);
 
   // Listen for stream events in the target pane. The hook falls back to the

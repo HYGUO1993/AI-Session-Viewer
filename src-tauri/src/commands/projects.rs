@@ -1,5 +1,5 @@
 use session_core::models::project::ProjectEntry;
-use session_core::provider::{claude, codex, grok};
+use session_core::provider::{claude, codebuddy, codex, grok};
 use session_core::provider::claude::{DeleteLevel, DeleteResult};
 
 #[tauri::command]
@@ -8,6 +8,7 @@ pub fn get_projects(source: String) -> Result<Vec<ProjectEntry>, String> {
         "claude" => claude::get_projects(),
         "codex" => codex::get_projects(),
         "grok" => grok::get_projects(),
+        "codebuddy" => codebuddy::get_projects(),
         _ => Err(format!("Unknown source: {}", source)),
     }
 }
@@ -18,6 +19,7 @@ pub fn refresh_projects_cache(source: String) -> Result<Vec<ProjectEntry>, Strin
         "claude" => claude::refresh_projects_cache(),
         "codex" => codex::get_projects(),
         "grok" => grok::get_projects(),
+        "codebuddy" => codebuddy::get_projects(),
         _ => Err(format!("Unknown source: {}", source)),
     }
 }
@@ -28,6 +30,7 @@ pub fn rebuild_projects_cache(source: String) -> Result<Vec<ProjectEntry>, Strin
         "claude" => claude::refresh_projects_cache(),
         "codex" => codex::rebuild_projects_cache(),
         "grok" => grok::rebuild_projects_cache(),
+        "codebuddy" => codebuddy::rebuild_projects_cache(),
         _ => Err(format!("Unknown source: {}", source)),
     }
 }
@@ -42,6 +45,7 @@ pub fn delete_project(
         "claude" => claude::delete_project(&project_id, level),
         "codex" => codex::delete_project(&project_id),
         "grok" => grok::delete_project(&project_id),
+        "codebuddy" => codebuddy::delete_project(&project_id),
         _ => Err(format!("Delete project not supported for source: {}", source)),
     }
 }

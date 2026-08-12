@@ -2,7 +2,7 @@ use session_core::metadata;
 use session_core::metadata::validate_session_id;
 use session_core::models::session::SessionIndexEntry;
 use session_core::paths::validate_session_file;
-use session_core::provider::{claude, codex, grok};
+use session_core::provider::{claude, codebuddy, codex, grok};
 use session_core::recyclebin;
 
 fn merge_session_metadata(source: &str, project_id: &str, sessions: &mut [SessionIndexEntry]) {
@@ -29,6 +29,7 @@ pub fn get_sessions(source: String, project_id: String) -> Result<Vec<SessionInd
         "claude" => claude::get_sessions(&project_id)?,
         "codex" => codex::get_sessions(&project_id)?,
         "grok" => grok::get_sessions(&project_id)?,
+        "codebuddy" => codebuddy::get_sessions(&project_id)?,
         _ => return Err(format!("Unknown source: {}", source)),
     };
 
@@ -46,6 +47,7 @@ pub fn refresh_sessions_cache(
         "claude" => claude::refresh_sessions_cache(&project_id)?,
         "codex" => codex::refresh_sessions_cache(&project_id)?,
         "grok" => grok::refresh_sessions_cache(&project_id)?,
+        "codebuddy" => codebuddy::refresh_sessions_cache(&project_id)?,
         _ => return Err(format!("Unknown source: {}", source)),
     };
 
@@ -63,6 +65,7 @@ pub fn get_invalid_sessions(
         "claude" => claude::get_invalid_sessions(&project_id)?,
         "codex" => codex::get_invalid_sessions(&project_id)?,
         "grok" => grok::get_invalid_sessions(&project_id)?,
+        "codebuddy" => codebuddy::get_invalid_sessions(&project_id)?,
         _ => return Err(format!("Unknown source: {}", source)),
     };
 
@@ -90,6 +93,8 @@ pub fn delete_session(
         Ok(path) => {
             // Claude/Codex sessions are one JSONL file. Grok keeps a session in
             // a directory, so recycle the validated file's parent as one unit.
+            // CodeBuddy keeps <uuid>.jsonl plus a sibling <uuid>/ subdir; recycle
+            // the JSONL and drop the subdir.
             let recycle_path = if source == "grok" {
                 path.parent()
                     .ok_or_else(|| "Invalid Grok session path".to_string())?
@@ -105,6 +110,12 @@ pub fn delete_session(
                 None,
                 None,
             )?;
+            if source == "codebuddy" {
+                if let Some(parent) = path.parent() {
+                    let sub = parent.join(path.file_stem().unwrap_or_default());
+                    let _ = std::fs::remove_dir_all(sub);
+                }
+            }
         }
         // The rollout file is already gone — e.g. the conversation was archived
         // or deleted in Codex desktop while it still lingered in our in-memory
@@ -125,6 +136,8 @@ pub fn delete_session(
         codex::invalidate_sessions_cache();
     } else if source == "grok" {
         grok::invalidate_sessions_cache();
+    } else if source == "codebuddy" {
+        codebuddy::invalidate_sessions_cache();
     }
 
     Ok(())
@@ -159,7 +172,7 @@ pub fn update_session_meta(
         result
     } else {
         let result = metadata::update_session_meta(&source, &project_id, &session_id, alias, tags);
-        if source == "codex" { codex::invalidate_sessions_cache(); } else if source == "grok" { grok::invalidate_sessions_cache(); }
+        if source == "codex" { codex::invalidate_sessions_cache(); } else if source == "grok" { grok::invalidate_sessions_cache(); } else if source == "codebuddy" { codebuddy::invalidate_sessions_cache(); }
         result
     }
 }
@@ -178,6 +191,8 @@ pub fn rename_chat_session(
         codex::invalidate_sessions_cache();
     } else if source == "grok" {
         grok::invalidate_sessions_cache();
+    } else if source == "codebuddy" {
+        codebuddy::invalidate_sessions_cache();
     }
     Ok(())
 }

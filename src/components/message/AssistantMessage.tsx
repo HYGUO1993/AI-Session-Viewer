@@ -29,9 +29,20 @@ export const AssistantMessage = memo(function AssistantMessage({
   layout = "default",
 }: Props) {
   const timeZone = useAppStore((state) => state.timeZone);
-  const assistantName = source === "codex" ? "Codex" : "Claude";
-  const iconColor = source === "codex" ? "text-green-500" : "text-orange-500";
-  const iconBg = source === "codex" ? "bg-green-500/10" : "bg-orange-500/10";
+  const assistantName =
+    source === "codex" ? "Codex" : source === "codebuddy" ? "CodeBuddy" : "Claude";
+  const iconColor =
+    source === "codex"
+      ? "text-green-500"
+      : source === "codebuddy"
+      ? "text-blue-500"
+      : "text-orange-500";
+  const iconBg =
+    source === "codex"
+      ? "bg-green-500/10"
+      : source === "codebuddy"
+      ? "bg-blue-500/10"
+      : "bg-orange-500/10";
   const [copied, setCopied] = useState(false);
   const { expanded: messageExpanded, setExpanded: setMessageExpanded } = useExpandAllControl(true, { followGlobal: true });
   const textContent = useMemo(

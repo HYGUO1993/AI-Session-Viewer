@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use session_core::models::message::{PaginatedMessages, RangeMessages};
-use session_core::provider::{claude, codex, grok};
+use session_core::provider::{claude, codebuddy, codex, grok};
 
 #[tauri::command]
 pub fn get_messages(
@@ -20,6 +20,7 @@ pub fn get_messages(
         "claude" => claude::parse_session_messages(path, page, page_size, from_end.unwrap_or(false)),
         "codex" => codex::parse_session_messages(path, page, page_size, from_end.unwrap_or(false)),
         "grok" => grok::parse_session_messages(path, page, page_size, from_end.unwrap_or(false)),
+        "codebuddy" => codebuddy::parse_session_messages(path, page, page_size, from_end.unwrap_or(false)),
         _ => Err(format!("Unknown source: {}", source)),
     }
 }
@@ -43,6 +44,7 @@ pub fn get_messages_range(
         "claude" => claude::parse_messages_range(path, start, end),
         "codex" => codex::parse_messages_range(path, start, end),
         "grok" => grok::parse_messages_range(path, start, end),
+        "codebuddy" => codebuddy::parse_messages_range(path, start, end),
         _ => Err(format!("Unknown source: {}", source)),
     }
 }

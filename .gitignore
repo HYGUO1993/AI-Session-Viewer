@@ -46,3 +46,6 @@ src-tauri/gen/
 docs/
 
 session-web-linux-x86_64
+
+# Agent working directory (local only)
+.workbuddy/

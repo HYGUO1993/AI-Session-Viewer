@@ -155,7 +155,8 @@ export const ThreadSummaryView = memo(function ThreadSummaryView({
   const timeZone = useAppStore((state) => state.timeZone);
   const { roots, isThreaded } = useMemo(() => buildMessageTree(messages), [messages]);
   const items = useMemo(() => flattenUserTree(roots, timeZone), [roots, timeZone]);
-  const assistantName = source === "codex" ? "Codex" : "Claude";
+  const assistantName =
+    source === "codex" ? "Codex" : source === "codebuddy" ? "CodeBuddy" : "Claude";
 
   const terminalShell = useAppStore((state) => state.terminalShell);
   const refreshInBackground = useAppStore((state) => state.refreshInBackground);

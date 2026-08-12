@@ -14,7 +14,7 @@ use crate::{require_ws_auth, AppToken, WsTicketStore};
 const DEBOUNCE_DURATION: Duration = Duration::from_millis(1000);
 
 use session_core::parser::path_encoder::get_projects_dir;
-use session_core::provider::{claude, codex, grok};
+use session_core::provider::{claude, codex, grok, codebuddy};
 
 /// Shared broadcast sender for file change events
 pub type FsChangeTx = Arc<broadcast::Sender<Vec<String>>>;
@@ -76,6 +76,9 @@ fn run_file_watcher_once(tx_clone: &broadcast::Sender<Vec<String>>) {
     if let Some(dir) = grok::get_sessions_dir() {
         if dir.exists() { let _ = watcher.watch(&dir, RecursiveMode::Recursive); }
     }
+    if let Some(dir) = codebuddy::get_sessions_dir() {
+        if dir.exists() { let _ = watcher.watch(&dir, RecursiveMode::Recursive); }
+    }
 
     let mut last_emit = Instant::now() - DEBOUNCE_DURATION;
 
@@ -116,6 +119,9 @@ fn run_file_watcher_once(tx_clone: &broadcast::Sender<Vec<String>>) {
                     }
                     if let Some(dir) = grok::get_sessions_dir() {
                         if event.paths.iter().any(|path| path.starts_with(&dir)) { grok::invalidate_sessions_cache(); }
+                    }
+                    if let Some(dir) = codebuddy::get_sessions_dir() {
+                        if event.paths.iter().any(|path| path.starts_with(&dir)) { codebuddy::invalidate_sessions_cache(); }
                     }
 
                     let paths: Vec<String> = event

@@ -15,6 +15,7 @@
 use std::path::{Component, Path, PathBuf};
 
 use crate::parser::path_encoder::get_projects_dir;
+use crate::provider::codebuddy;
 use crate::provider::codex;
 use crate::provider::grok;
 
@@ -24,6 +25,7 @@ pub enum SessionSourceKind {
     Claude,
     Codex,
     Grok,
+    Codebuddy,
 }
 
 impl SessionSourceKind {
@@ -32,6 +34,7 @@ impl SessionSourceKind {
             "claude" => Ok(Self::Claude),
             "codex" => Ok(Self::Codex),
             "grok" => Ok(Self::Grok),
+            "codebuddy" => Ok(Self::Codebuddy),
             _ => Err(format!("Unknown source: {}", source)),
         }
     }
@@ -63,6 +66,12 @@ fn canonical_grok_root() -> Result<PathBuf, String> {
     let path = grok::get_sessions_dir()
         .ok_or_else(|| "Could not find Grok sessions directory".to_string())?;
     canonicalize_dir(path, "Grok sessions directory")
+}
+
+fn canonical_codebuddy_root() -> Result<PathBuf, String> {
+    let path = codebuddy::get_sessions_dir()
+        .ok_or_else(|| "Could not find CodeBuddy projects directory".to_string())?;
+    canonicalize_dir(path, "CodeBuddy projects directory")
 }
 
 fn validate_claude_layout(path: &Path, base: &Path) -> Result<(), String> {
@@ -118,6 +127,18 @@ fn validate_grok_layout(path: &Path, base: &Path) -> Result<(), String> {
     Ok(())
 }
 
+fn validate_codebuddy_layout(path: &Path, base: &Path) -> Result<(), String> {
+    let relative = path
+        .strip_prefix(base)
+        .map_err(|_| "Session file is outside the CodeBuddy projects directory".to_string())?;
+    if relative.components().count() != 2 {
+        return Err(
+            "CodeBuddy session file must live directly under a project directory".to_string(),
+        );
+    }
+    Ok(())
+}
+
 /// Canonicalize and validate a user-supplied session file path. Returns the
 /// canonical path on success; returns an error if anything looks suspicious.
 pub fn validate_session_file(source: &str, file_path: &str) -> Result<PathBuf, String> {
@@ -149,6 +170,10 @@ pub fn validate_session_file(source: &str, file_path: &str) -> Result<PathBuf, S
         SessionSourceKind::Grok => {
             let base = canonical_grok_root()?;
             validate_grok_layout(&canonical, &base)?;
+        }
+        SessionSourceKind::Codebuddy => {
+            let base = canonical_codebuddy_root()?;
+            validate_codebuddy_layout(&canonical, &base)?;
         }
     }
 

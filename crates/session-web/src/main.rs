@@ -72,6 +72,7 @@ pub(crate) enum SessionSource {
     Claude,
     Codex,
     Grok,
+    Codebuddy,
 }
 
 impl SessionSource {
@@ -80,6 +81,7 @@ impl SessionSource {
             "claude" => Ok(Self::Claude),
             "codex" => Ok(Self::Codex),
             "grok" => Ok(Self::Grok),
+            "codebuddy" => Ok(Self::Codebuddy),
             _ => Err(format!("Unknown source: {}", source)),
         }
     }

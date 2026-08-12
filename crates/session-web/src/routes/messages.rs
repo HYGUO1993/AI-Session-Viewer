@@ -3,7 +3,7 @@ use axum::http::StatusCode;
 use axum::response::Json;
 use serde::Deserialize;
 use session_core::models::message::{PaginatedMessages, RangeMessages};
-use session_core::provider::{claude, codex, grok};
+use session_core::provider::{claude, codebuddy, codex, grok};
 
 use crate::resolve_session_file_path;
 
@@ -36,12 +36,13 @@ pub async fn get_messages(
 
     let result = tokio::task::spawn_blocking(move || {
         match source.as_str() {
-            "claude" => {
-                claude::parse_session_messages(&resolved_path, page, page_size, from_end)
-            }
-            "codex" => codex::parse_session_messages(&resolved_path, page, page_size, from_end),
-            "grok" => grok::parse_session_messages(&resolved_path, page, page_size, from_end),
-            _ => Err(format!("Unknown source: {}", source)),
+        "claude" => {
+            claude::parse_session_messages(&resolved_path, page, page_size, from_end)
+        }
+        "codex" => codex::parse_session_messages(&resolved_path, page, page_size, from_end),
+        "grok" => grok::parse_session_messages(&resolved_path, page, page_size, from_end),
+        "codebuddy" => codebuddy::parse_session_messages(&resolved_path, page, page_size, from_end),
+        _ => Err(format!("Unknown source: {}", source)),
         }
     })
     .await
@@ -74,6 +75,7 @@ pub async fn get_messages_range(
         "claude" => claude::parse_messages_range(&resolved_path, start, end),
         "codex" => codex::parse_messages_range(&resolved_path, start, end),
         "grok" => grok::parse_messages_range(&resolved_path, start, end),
+        "codebuddy" => codebuddy::parse_messages_range(&resolved_path, start, end),
         _ => Err(format!("Unknown source: {}", source)),
     })
     .await

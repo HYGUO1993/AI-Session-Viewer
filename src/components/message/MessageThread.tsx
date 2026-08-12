@@ -206,7 +206,8 @@ function getThreadLineText(node: ThreadDisplayNode, source: string): string {
   const title = node.threadTitle.trim();
 
   if (node.message.role === "assistant") {
-    const assistantName = source === "claude" ? "Claude" : "Codex";
+    const assistantName =
+      source === "claude" ? "Claude" : source === "codebuddy" ? "CodeBuddy" : "Codex";
     return title ? `${assistantName} · ${title}` : assistantName;
   }
 

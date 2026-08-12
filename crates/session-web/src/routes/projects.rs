@@ -3,7 +3,7 @@ use axum::response::Json;
 use axum::http::StatusCode;
 use serde::Deserialize;
 use session_core::models::project::ProjectEntry;
-use session_core::provider::{claude, codex, grok};
+use session_core::provider::{claude, codebuddy, codex, grok};
 use session_core::provider::claude::{DeleteLevel, DeleteResult};
 
 #[derive(Deserialize)]
@@ -22,9 +22,11 @@ pub async fn get_projects(
         ("claude", true) => claude::refresh_projects_cache(),
         ("codex", true) => codex::rebuild_projects_cache(),
         ("grok", true) => grok::rebuild_projects_cache(),
+        ("codebuddy", true) => codebuddy::rebuild_projects_cache(),
         ("claude", false) => claude::get_projects(),
         ("codex", false) => codex::get_projects(),
         ("grok", false) => grok::get_projects(),
+        ("codebuddy", false) => codebuddy::get_projects(),
         _ => Err(format!("Unknown source: {}", source)),
     })
     .await
@@ -57,6 +59,7 @@ pub async fn delete_project(
         "claude" => claude::delete_project(&project_id, level),
         "codex" => codex::delete_project(&project_id),
         "grok" => grok::delete_project(&project_id),
+        "codebuddy" => codebuddy::delete_project(&project_id),
         _ => Err(format!("Delete project not supported for source: {}", source)),
     })
     .await

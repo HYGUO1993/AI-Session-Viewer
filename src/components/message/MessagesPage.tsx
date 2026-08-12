@@ -27,7 +27,7 @@ import { isRemoteNodeActive } from "../../services/nodeConfig";
 
 declare const __IS_TAURI__: boolean;
 const USE_TAURI_TRANSPORT = __IS_TAURI__ && !isRemoteNodeActive();
-type MessageSource = "claude" | "codex" | "grok";
+type MessageSource = "claude" | "codex" | "grok" | "codebuddy";
 type SplitDirection = "horizontal" | "vertical";
 
 const SPLIT_PANE_MESSAGES_PAGE_SIZE = 50;
@@ -442,7 +442,10 @@ export function MessagesPage() {
     "";
 
   usePaneChatStream(mainPaneId, resolvedSessionId);
-  const cliAvailable = source !== "grok" && availableClis.some((c) => c.cliType === source);
+  const cliAvailable =
+    source !== "grok" &&
+    source !== "codebuddy" &&
+    availableClis.some((c) => c.cliType === source);
   const [editingSession, setEditingSession] = useState(false);
 
   // Detect CLI and set chat context on mount
@@ -453,7 +456,7 @@ export function MessagesPage() {
   // Sync source from appStore into chatStore, then refresh model list
   useEffect(() => {
     setActivePane(mainPaneId);
-    if (source !== "grok") {
+    if (source !== "grok" && source !== "codebuddy") {
       setPaneSource(mainPaneId, source);
       fetchChatModelList(mainPaneId);
     }
@@ -1042,7 +1045,9 @@ export function MessagesPage() {
           </div>
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
-          {source !== "grok" && filePath && <SessionCostBadge filePath={filePath} />}
+          {source !== "grok" && source !== "codebuddy" && filePath && (
+            <SessionCostBadge filePath={filePath} />
+          )}
           <button
             onClick={toggleTimestamp}
             className={`p-1.5 rounded transition-colors ${
@@ -1668,7 +1673,7 @@ function SplitSessionPane({
   }, [loadMessages]);
 
   useEffect(() => {
-    if (source !== "grok") {
+    if (source !== "grok" && source !== "codebuddy") {
       setPaneSource(paneId, source);
     }
   }, [paneId, setPaneSource, source]);
@@ -1939,7 +1944,10 @@ const ChatMessagesBlock = memo(function ChatMessagesBlock({
 ));
 
 function assistantNameFromSource(source: MessageSource) {
-  return source === "codex" ? "Codex" : source === "grok" ? "Grok" : "Claude";
+  if (source === "codex") return "Codex";
+  if (source === "grok") return "Grok";
+  if (source === "codebuddy") return "CodeBuddy";
+  return "Claude";
 }
 
 function extractUserQuestionPreview(message: DisplayMessage) {

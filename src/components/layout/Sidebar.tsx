@@ -49,10 +49,36 @@ import {
   FolderX,
   Repeat,
   Sparkles,
+  ChevronDown,
 } from "lucide-react";
 
 declare const __IS_TAURI__: boolean;
 declare const __APP_VERSION__: string;
+
+// All supported conversation sources. Kept as a single list so the sidebar
+// dropdown stays correct no matter how many sources exist (the 4-tab row
+// overflowed the narrow sidebar once CodeBuddy was added).
+type SourceKey = "claude" | "codex" | "grok" | "codebuddy";
+const SOURCE_OPTIONS: {
+  key: SourceKey;
+  label: string;
+  icon: typeof Bot;
+  active: string;
+}[] = [
+  { key: "claude", label: "Claude", icon: Bot, active: "bg-orange-500/20 text-orange-400" },
+  { key: "codex", label: "Codex", icon: Terminal, active: "bg-green-500/20 text-green-400" },
+  { key: "grok", label: "Grok", icon: Sparkles, active: "bg-purple-500/20 text-purple-400" },
+  { key: "codebuddy", label: "CodeBuddy", icon: Bot, active: "bg-blue-500/20 text-blue-400" },
+];
+
+function sourceLabel(s: string): string {
+  return SOURCE_OPTIONS.find((o) => o.key === s)?.label ?? "Claude";
+}
+
+function SourceIcon({ source, className }: { source: string; className?: string }) {
+  const Icon = SOURCE_OPTIONS.find((o) => o.key === source)?.icon ?? Bot;
+  return <Icon className={className} />;
+}
 
 export function Sidebar() {
   const navigate = useNavigate();
@@ -115,12 +141,14 @@ export function Sidebar() {
     location.pathname === "/direct-chat" ||
     location.pathname.startsWith(`/projects/${encodeURIComponent("<codex-direct>/")}`);
 
-  const handleSourceChange = (s: "claude" | "codex" | "grok") => {
+  const handleSourceChange = (s: "claude" | "codex" | "grok" | "codebuddy") => {
     if (s !== source) {
       setSource(s);
       navigate("/projects");
     }
   };
+
+  const [sourceMenuOpen, setSourceMenuOpen] = useState(false);
 
   return (
     <aside className="w-64 h-full border-r border-border bg-card flex flex-col shrink-0">
@@ -130,41 +158,53 @@ export function Sidebar() {
           AI Session Viewer
         </h1>
         <NodeSelector />
-        {/* Source Tabs */}
-        <div className="flex rounded-lg bg-muted p-0.5">
+        {/* Source selector — dropdown so the narrow sidebar doesn't overflow
+            once more than 3 sources exist (CodeBuddy was the 4th). */}
+        <div className="relative">
           <button
-            onClick={() => handleSourceChange("claude")}
-            className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
-              source === "claude"
-                ? "bg-orange-500/20 text-orange-400 shadow-sm"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
+            type="button"
+            onClick={() => setSourceMenuOpen((v) => !v)}
+            className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-md bg-muted text-sm font-medium text-foreground hover:bg-accent/60 transition-colors"
           >
-            <Bot className="w-3.5 h-3.5" />
-            Claude
+            <span className="flex items-center gap-2 truncate">
+              <SourceIcon source={source} className="w-4 h-4 shrink-0" />
+              <span className="truncate">{sourceLabel(source)}</span>
+            </span>
+            <ChevronDown className="w-4 h-4 opacity-60 shrink-0" />
           </button>
-          <button
-            onClick={() => handleSourceChange("codex")}
-            className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
-              source === "codex"
-                ? "bg-green-500/20 text-green-400 shadow-sm"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            <Terminal className="w-3.5 h-3.5" />
-            Codex
-          </button>
-          <button
-            onClick={() => handleSourceChange("grok")}
-            className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
-              source === "grok"
-                ? "bg-purple-500/20 text-purple-400 shadow-sm"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            <Sparkles className="w-3.5 h-3.5" />
-            Grok
-          </button>
+          {sourceMenuOpen && (
+            <>
+              <div
+                className="fixed inset-0 z-40"
+                onClick={() => setSourceMenuOpen(false)}
+              />
+              <div className="absolute z-50 mt-1 w-full rounded-md border border-border bg-card shadow-lg py-1">
+                {SOURCE_OPTIONS.map((opt) => {
+                  const Icon = opt.icon;
+                  const active = source === opt.key;
+                  return (
+                    <button
+                      key={opt.key}
+                      type="button"
+                      onClick={() => {
+                        handleSourceChange(opt.key);
+                        setSourceMenuOpen(false);
+                      }}
+                      className={`w-full flex items-center gap-2 px-3 py-2 text-sm transition-colors ${
+                        active
+                          ? opt.active
+                          : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+                      }`}
+                    >
+                      <Icon className="w-4 h-4 shrink-0" />
+                      <span className="flex-1 text-left truncate">{opt.label}</span>
+                      {active && <Check className="w-4 h-4 shrink-0" />}
+                    </button>
+                  );
+                })}
+              </div>
+            </>
+          )}
         </div>
       </div>
 
@@ -172,7 +212,7 @@ export function Sidebar() {
       <nav className="flex-1 overflow-y-auto p-2">
         {/* Quick links */}
         <div className="mb-4">
-          {source !== "grok" && (
+          {source !== "grok" && source !== "codebuddy" && (
             <button
               onClick={() => {
                 clearChat();
@@ -199,7 +239,7 @@ export function Sidebar() {
             <Search className="w-4 h-4" />
             全局搜索
           </button>
-          {source !== "grok" && (
+          {source !== "grok" && source !== "codebuddy" && (
             <button
               onClick={() => navigate("/stats")}
               className={`w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors ${
